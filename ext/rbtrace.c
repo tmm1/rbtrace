@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <strings.h>
 #include <sys/time.h>
 #include <time.h>
 
@@ -9,7 +10,7 @@
 #include <node.h>
 
 static uint64_t
-timeofday_us()
+timeofday_usec()
 {
   struct timeval tv;
   gettimeofday(&tv, NULL);
@@ -17,92 +18,169 @@ timeofday_us()
   return (uint64_t)tv.tv_sec*1e6 + (uint64_t)tv.tv_usec;
 }
 
-ID current;
+#define MAX_TRACERS 100
+#define MAX_CALLS 10
 
-#define DEFINE_EVENT_HOOK(name) \
-  static rb_event_hook_func_t \
-  name##_event_hook(rb_event_t event, NODE *node, VALUE self, ID id, VALUE klass)
+struct rbtracer_t {
+  VALUE self;
+  VALUE klass;
+  ID mid;
 
-/* static uint64_t*/
-/* call_counter = 0;*/
+  int calls;
+  uint64_t call_times[MAX_CALLS];
 
-/* DEFINE_EVENT_HOOK(call)*/
-/* {*/
-/*   call_counter++;*/
+  int c_calls;
+  uint64_t c_call_times[MAX_CALLS];
+};
+typedef struct rbtracer_t rbtracer_t;
 
-/*   uint64_t usec = timeofday_us();*/
-/*   printf("%" PRIu64 ": called(%d) %s\n", usec, call_counter, rb_id2name(id));*/
-/* }*/
+static rbtracer_t tracers[MAX_TRACERS];
+static unsigned int num_tracers = 0;
 
-/* DEFINE_EVENT_HOOK(return)*/
-/* {*/
-/*   uint64_t usec = timeofday_us();*/
-/*   printf("%" PRIu64 ": returned(%d)\n", usec, call_counter);*/
+static int in_event_hook = 0;
+static int nesting = 0;
 
-/*   call_counter--;*/
-/* }*/
+static void
+event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
+{
+  if (num_tracers == 0) return;
+  if (in_event_hook) return;
+  if (mid == ID_ALLOCATOR) return;
+  in_event_hook++;
 
-static uint64_t
-c_call_counter = 0,
-watched_counter = 0,
-watched_time = 0;
+  if (klass) {
+    if (TYPE(klass) == T_ICLASS) {
+      klass = RBASIC(klass)->klass;
+    }
+  }
+
+  int i;
+  uint64_t usec, diff;
+  rbtracer_t *tracer = NULL;
+
+  for (i=0; i<num_tracers; i++) {
+    if (tracers[i].mid == mid) {
+      if (!tracers[i].klass || tracers[i].klass == klass) {
+        if (!tracers[i].self || tracers[i].self == self) {
+          tracer = &tracers[i];
+        }
+      }
+    }
+  }
+  if (!tracer) goto out;
+
+  usec = timeofday_usec();
+
+  switch (event) {
+    case RUBY_EVENT_CALL:
+      if (tracer->calls < MAX_CALLS) {
+        tracer->call_times[ tracer->calls ] = usec;
+
+        if (nesting) {
+          printf("\n");
+          for (i=0; i<nesting; i++)
+            printf("   ");
+        }
+
+        if (klass) {
+          if (FL_TEST(klass, FL_SINGLETON)) {
+            klass = self;
+          }
+
+          printf("%s%c", rb_class2name(klass), klass==self ? '.' : '#');
+        }
+
+        printf("%s ", rb_id2name(mid));
+      }
+      tracer->calls++;
+
+      nesting++;
+      break;
+
+    case RUBY_EVENT_RETURN:
+      if (nesting > 0)
+        nesting--;
+
+      if (tracer->calls > 0) {
+        tracer->calls--;
+
+        if (tracer->calls < MAX_CALLS) {
+          diff = usec - tracer->call_times[ tracer->calls ];
+
+          if (nesting) {
+            for (i=0; i<nesting; i++)
+              printf("   ");
+          }
+          printf("<%" PRIu64 ">\n", diff);
+        }
+      }
+      break;
+
+    case RUBY_EVENT_C_CALL:
+      break;
+
+    case RUBY_EVENT_C_RETURN:
+      break;
+  }
+
+out:
+  in_event_hook--;
+}
 
 static int
-waiting_inside = 0;
-
-DEFINE_EVENT_HOOK(line)
+rbtracer_add(VALUE self, VALUE klass, ID mid)
 {
-  if (waiting_inside == 1) {
-    printf("ohai\n");
-    waiting_inside = 0;
-  }
-  rb_remove_event_hook(line_event_hook);
-}
-
-DEFINE_EVENT_HOOK(c_call)
-{
-  c_call_counter++;
-
-  if (current != id) return;
-  if (watched_counter != 0) return;
-
-  uint64_t usec = timeofday_us();
-
-  watched_counter = c_call_counter;
-  watched_time = usec;
-  waiting_inside = 1;
-
-  printf("-------\n");
-  rb_eval_string_protect("p local_variables", 0);
-  rb_eval_string_protect("p [key, sup]", 0);
-  printf("%" PRIu64 ": called(%d) %s#%s\n", usec, c_call_counter, rb_class2name(klass), rb_id2name(id));
-
-  /* rb_add_event_hook(line_event_hook, RUBY_EVENT_LINE);*/
-}
-
-DEFINE_EVENT_HOOK(c_return)
-{
-  if (watched_counter != 0 && watched_counter == c_call_counter) {
-    uint64_t usec = timeofday_us();
-    printf("%" PRIu64 ": returned(%d) %s in %d\n", usec, c_call_counter, rb_id2name(id), usec-watched_time);
-    rb_eval_string_protect("p [:out, local_variables]", 0);
-
-    waiting_inside = 0;
-    watched_counter = 0;
-    /* rb_remove_event_hook(line_event_hook);*/
+  if (num_tracers >= MAX_TRACERS) return -1;
+  if (num_tracers == 0) {
+    rb_add_event_hook(
+      event_hook,
+      RUBY_EVENT_CALL   | RUBY_EVENT_C_CALL |
+      RUBY_EVENT_RETURN | RUBY_EVENT_C_RETURN
+    );
   }
 
-  c_call_counter--;
+  memset(&tracers[num_tracers], 0, sizeof(rbtracer_t));
+  tracers[num_tracers].self = self;
+  tracers[num_tracers].klass = klass;
+  tracers[num_tracers].mid = mid;
+
+  return num_tracers++;
+}
+
+static VALUE
+rbtrace(VALUE self, VALUE method)
+{
+  Check_Type(method, T_STRING);
+
+  VALUE klass = 0, obj = 0;
+  ID mid;
+  char *str = RSTRING(method)->ptr;
+  char *index;
+
+  if (NULL != (index = rindex(str, '.'))) {
+    *index = 0;
+    obj = rb_eval_string_protect(str, 0);
+    *index = '.';
+
+    mid = rb_intern(index+1);
+  } else if (NULL != (index = rindex(str, '#'))) {
+    *index = 0;
+    klass = rb_eval_string_protect(str, 0);
+    *index = '#';
+
+    mid = rb_intern(index+1);
+  } else {
+    mid = rb_intern(str);
+  }
+
+  if (rbtracer_add(obj, klass, mid) > -1)
+    return Qtrue;
+  else
+    return Qfalse;
 }
 
 void
 Init_rbtrace()
 {
-  current = rb_intern("[]=");
-
-  /* rb_add_event_hook(call_event_hook, RUBY_EVENT_CALL);*/
-  /* rb_add_event_hook(return_event_hook, RUBY_EVENT_RETURN);*/
-
-  rb_add_event_hook(c_call_event_hook, RUBY_EVENT_C_CALL|RUBY_EVENT_CALL);
-  rb_add_event_hook(c_return_event_hook, RUBY_EVENT_C_RETURN|RUBY_EVENT_RETURN);
+  rb_define_method(rb_cObject, "rbtrace", rbtrace, 1);
 }
