@@ -1,4 +1,5 @@
 #include <inttypes.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -22,15 +23,11 @@ timeofday_usec()
 #define MAX_CALLS 10
 
 struct rbtracer_t {
+  int id;
+
   VALUE self;
   VALUE klass;
   ID mid;
-
-  int calls;
-  uint64_t call_times[MAX_CALLS];
-
-  int c_calls;
-  uint64_t c_call_times[MAX_CALLS];
 };
 typedef struct rbtracer_t rbtracer_t;
 
@@ -39,6 +36,7 @@ static unsigned int num_tracers = 0;
 
 static int in_event_hook = 0;
 static int nesting = 0;
+FILE *output = NULL;
 
 static void
 event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
@@ -48,15 +46,17 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
   if (mid == ID_ALLOCATOR) return;
   in_event_hook++;
 
+  int i;
+  uint64_t usec, diff;
+  rbtracer_t *tracer = NULL;
+  bool singleton = 0;
+
   if (klass) {
     if (TYPE(klass) == T_ICLASS) {
       klass = RBASIC(klass)->klass;
     }
+    singleton = FL_TEST(klass, FL_SINGLETON);
   }
-
-  int i;
-  uint64_t usec, diff;
-  rbtracer_t *tracer = NULL;
 
   for (i=0; i<num_tracers; i++) {
     if (tracers[i].mid == mid) {
@@ -72,54 +72,29 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
   usec = timeofday_usec();
 
   switch (event) {
-    case RUBY_EVENT_CALL:
-      if (tracer->calls < MAX_CALLS) {
-        tracer->call_times[ tracer->calls ] = usec;
-
-        if (nesting) {
-          printf("\n");
-          for (i=0; i<nesting; i++)
-            printf("   ");
-        }
-
-        if (klass) {
-          if (FL_TEST(klass, FL_SINGLETON)) {
-            klass = self;
-          }
-
-          printf("%s%c", rb_class2name(klass), klass==self ? '.' : '#');
-        }
-
-        printf("%s ", rb_id2name(mid));
-      }
-      tracer->calls++;
-
-      nesting++;
-      break;
-
-    case RUBY_EVENT_RETURN:
-      if (nesting > 0)
-        nesting--;
-
-      if (tracer->calls > 0) {
-        tracer->calls--;
-
-        if (tracer->calls < MAX_CALLS) {
-          diff = usec - tracer->call_times[ tracer->calls ];
-
-          if (nesting) {
-            for (i=0; i<nesting; i++)
-              printf("   ");
-          }
-          printf("<%" PRIu64 ">\n", diff);
-        }
-      }
-      break;
-
     case RUBY_EVENT_C_CALL:
+    case RUBY_EVENT_CALL:
+      fprintf(
+        output,
+        "%llu,%s,%d,%s,%d,%s\n",
+        usec,
+        event == RUBY_EVENT_CALL ? "call" : "ccall",
+        tracer->id,
+        rb_id2name(mid),
+        singleton,
+        klass ? rb_class2name(singleton ? self : klass) : ""
+      );
       break;
 
     case RUBY_EVENT_C_RETURN:
+    case RUBY_EVENT_RETURN:
+      fprintf(
+        output,
+        "%llu,%s,%d\n",
+        usec,
+        event == RUBY_EVENT_RETURN ? "return" : "creturn",
+        tracer->id
+      );
       break;
   }
 
@@ -128,9 +103,12 @@ out:
 }
 
 static int
-rbtracer_add(VALUE self, VALUE klass, ID mid)
+rbtracer_add(char *query, VALUE self, VALUE klass, ID mid)
 {
-  if (num_tracers >= MAX_TRACERS) return -1;
+  int tracer_id = -1;
+  uint64_t usec = timeofday_usec();
+
+  if (num_tracers >= MAX_TRACERS) goto out;
   if (num_tracers == 0) {
     rb_add_event_hook(
       event_hook,
@@ -140,11 +118,23 @@ rbtracer_add(VALUE self, VALUE klass, ID mid)
   }
 
   memset(&tracers[num_tracers], 0, sizeof(rbtracer_t));
+
+  tracers[num_tracers].id = num_tracers;
   tracers[num_tracers].self = self;
   tracers[num_tracers].klass = klass;
   tracers[num_tracers].mid = mid;
 
-  return num_tracers++;
+  tracer_id = num_tracers++;
+
+out:
+  fprintf(
+    output,
+    "%llu,new,%d,%s\n",
+    usec,
+    tracer_id,
+    query
+  );
+  return tracer_id;
 }
 
 static VALUE
@@ -154,6 +144,7 @@ rbtrace(VALUE self, VALUE method)
 
   VALUE klass = 0, obj = 0;
   ID mid;
+  int tracer_id = -1;
   char *str = RSTRING(method)->ptr;
   char *index;
 
@@ -173,14 +164,15 @@ rbtrace(VALUE self, VALUE method)
     mid = rb_intern(str);
   }
 
-  if (rbtracer_add(obj, klass, mid) > -1)
-    return Qtrue;
-  else
-    return Qfalse;
+  tracer_id = rbtracer_add(str, obj, klass, mid);
+  return tracer_id == -1 ? Qfalse : Qtrue;
 }
 
 void
 Init_rbtrace()
 {
+  if (!output)
+    output = stdout;
+
   rb_define_method(rb_cObject, "rbtrace", rbtrace, 1);
 }

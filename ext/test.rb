@@ -13,7 +13,7 @@ class Another
     self[:a] = :b
   end
   def []=(key, value)
-    sup = 123
+    (@hash ||= {})[key]=value
   end
 end
 
