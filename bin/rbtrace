@@ -13,15 +13,23 @@ def process_line(line)
 
   case event
   when 'add'
-    name = args.first
-    @tracers[id] = {
-      :name => name,
-      :times => [],
-      :ctimes => []
-    }
+    if id == -1
+      puts line
+    else
+      name = args.first
+      @tracers[id] = {
+        :name => name,
+        :times => [],
+        :ctimes => []
+      }
+    end
 
   when 'remove'
-    @tracers.delete(id)
+    if id == -1
+      puts line
+    else
+      @tracers.delete(id)
+    end
 
   when 'call','ccall'
     method, is_singleton, klass = *args
