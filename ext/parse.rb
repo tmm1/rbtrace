@@ -10,13 +10,16 @@ file.each_line do |line|
   tracer = tracers[id]
 
   case event
-  when 'new'
+  when 'add'
     name = args.first
     tracers[id] = {
       :name => name,
       :times => [],
       :ctimes => []
     }
+
+  when 'remove'
+    tracers.delete(id)
 
   when 'call','ccall'
     method, is_singleton, klass = *args

@@ -46,7 +46,7 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
   if (mid == ID_ALLOCATOR) return;
   in_event_hook++;
 
-  int i;
+  int i, n;
   uint64_t usec, diff;
   rbtracer_t *tracer = NULL;
   bool singleton = 0;
@@ -58,11 +58,15 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
     singleton = FL_TEST(klass, FL_SINGLETON);
   }
 
-  for (i=0; i<num_tracers; i++) {
-    if (tracers[i].mid == mid) {
-      if (!tracers[i].klass || tracers[i].klass == klass) {
-        if (!tracers[i].self || tracers[i].self == self) {
-          tracer = &tracers[i];
+  for (i=0, n=0; i<MAX_TRACERS && n<num_tracers; i++) {
+    if (tracers[i].mid) {
+      n++;
+
+      if (tracers[i].mid == mid) {
+        if (!tracers[i].klass || tracers[i].klass == klass) {
+          if (!tracers[i].self || tracers[i].self == self) {
+            tracer = &tracers[i];
+          }
         }
       }
     }
@@ -103,12 +107,60 @@ out:
 }
 
 static int
-rbtracer_add(char *query, VALUE self, VALUE klass, ID mid)
+rbtracer_remove(int id)
 {
   int tracer_id = -1;
   uint64_t usec = timeofday_usec();
 
+  if (tracer_id >= MAX_TRACERS) goto out;
+
+  rbtracer_t *tracer = &tracers[id];
+  if (tracer->id) {
+    tracer_id = tracer->id;
+    tracer->mid = 0;
+
+    num_tracers--;
+    if (num_tracers == 0)
+      rb_remove_event_hook(event_hook);
+  }
+
+out:
+  fprintf(
+    output,
+    "%llu,remove,%d\n",
+    usec,
+    tracer_id
+  );
+  return tracer_id;
+}
+
+static int
+rbtracer_add(char *query, VALUE self, VALUE klass, ID mid)
+{
+  int i;
+  int tracer_id = -1;
+  rbtracer_t *tracer = NULL;
+  uint64_t usec = timeofday_usec();
+
+  if (!mid) goto out;
   if (num_tracers >= MAX_TRACERS) goto out;
+
+  for (i=0; i<MAX_TRACERS; i++) {
+    if (!tracers[i].mid) {
+      tracer = &tracers[i];
+      tracer_id = i;
+      break;
+    }
+  }
+  if (!tracer) goto out;
+
+  memset(tracer, 0, sizeof(*tracer));
+
+  tracer->id = tracer_id;
+  tracer->self = self;
+  tracer->klass = klass;
+  tracer->mid = mid;
+
   if (num_tracers == 0) {
     rb_add_event_hook(
       event_hook,
@@ -117,19 +169,12 @@ rbtracer_add(char *query, VALUE self, VALUE klass, ID mid)
     );
   }
 
-  memset(&tracers[num_tracers], 0, sizeof(rbtracer_t));
-
-  tracers[num_tracers].id = num_tracers;
-  tracers[num_tracers].self = self;
-  tracers[num_tracers].klass = klass;
-  tracers[num_tracers].mid = mid;
-
-  tracer_id = num_tracers++;
+  num_tracers++;
 
 out:
   fprintf(
     output,
-    "%llu,new,%d,%s\n",
+    "%llu,add,%d,%s\n",
     usec,
     tracer_id,
     query
@@ -171,8 +216,8 @@ rbtrace(VALUE self, VALUE method)
 void
 Init_rbtrace()
 {
-  if (!output)
-    output = stdout;
+  if (!output) output = stdout;
+  memset(&tracers, 0, sizeof(tracers));
 
   rb_define_method(rb_cObject, "rbtrace", rbtrace, 1);
 }
