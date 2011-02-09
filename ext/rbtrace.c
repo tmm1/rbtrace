@@ -43,8 +43,9 @@ typedef struct rbtracer_t rbtracer_t;
 static rbtracer_t tracers[MAX_TRACERS];
 static unsigned int num_tracers = 0;
 
-key_t mq_key;
-int mq_id = -1;
+key_t mqi_key, mqo_key;
+int mqi_id = -1, mqo_id = -1;
+
 struct event_msg {
   long mtype;
   char buf[56];
@@ -63,7 +64,7 @@ struct event_msg {
     snprintf(msg.buf, sizeof(msg.buf), "%" PRIu64 "," format, usec, __VA_ARGS__);\
     \
     for (n=0; n<10 && ret==-1; n++)\
-      ret = msgsnd(mq_id, &msg, sizeof(msg)-sizeof(long), IPC_NOWAIT);\
+      ret = msgsnd(mqo_id, &msg, sizeof(msg)-sizeof(long), IPC_NOWAIT);\
     if (ret == -1)\
       fprintf(stderr, "msgsnd(): %s\n", strerror(errno));\
   }\
@@ -267,9 +268,13 @@ untrace(VALUE self, VALUE query)
 static void
 cleanup()
 {
-  if (mq_id != -1) {
-    msgctl(mq_id, IPC_RMID, NULL);
-    mq_id = -1;
+  if (mqo_id != -1) {
+    msgctl(mqo_id, IPC_RMID, NULL);
+    mqo_id = -1;
+  }
+  if (mqi_id != -1) {
+    msgctl(mqi_id, IPC_RMID, NULL);
+    mqi_id = -1;
   }
 }
 
@@ -282,9 +287,7 @@ cleanup_ruby(VALUE data)
 static void
 sigurg(int signal)
 {
-  rbtracer_add("sleep");
-  return;
-  if (mq_id == -1) return;
+  if (mqi_id == -1) return;
 
   struct event_msg msg;
   char *query = NULL;
@@ -293,7 +296,7 @@ sigurg(int signal)
   int n = 0;
 
   for (n=0; n<10 && ret==-1; n++)
-    ret = msgrcv(mq_id, &msg, sizeof(msg)-sizeof(long), 0, IPC_NOWAIT);
+    ret = msgrcv(mqi_id, &msg, sizeof(msg)-sizeof(long), 0, IPC_NOWAIT);
 
   if (ret == -1) {
     fprintf(stderr, "msgrcv(): %s\n", strerror(errno));
@@ -302,11 +305,10 @@ sigurg(int signal)
     if (msg.buf[len-1] == '\n')
       msg.buf[len-1] = 0;
 
-    printf("ohai, got: %s\n", msg.buf);
-    if (0 == strcmp("add,", msg.buf)) {
+    if (0 == strncmp("add,", msg.buf, 4)) {
       query = msg.buf + 4;
       rbtracer_add(query);
-    } else if (0 == strcmp("del,", msg.buf)) {
+    } else if (0 == strncmp("del,", msg.buf, 4)) {
       query = msg.buf + 4;
       rbtracer_remove(query, -1);
     }
@@ -323,14 +325,18 @@ Init_rbtrace()
 
   memset(&tracers, 0, sizeof(tracers));
 
-  mq_key = (key_t) getpid();
-  mq_id  = msgget(mq_key, 0666 | IPC_CREAT);
+  mqo_key = (key_t) getpid();
+  mqo_id  = msgget(mqo_key, 0666 | IPC_CREAT);
+  if (mqo_id == -1)
+    rb_sys_fail("msgget");
 
-  if (mq_id == -1)
+  mqi_key = (key_t) -getpid();
+  mqi_id  = msgget(mqi_key, 0666 | IPC_CREAT);
+  if (mqi_id == -1)
     rb_sys_fail("msgget");
 
   /* struct msqid_ds stat;*/
-  /* msgctl(mq_id, IPC_STAT, &stat);*/
+  /* msgctl(mqo_id, IPC_STAT, &stat);*/
   /* printf("cbytes: %lu, qbytes: %lu, qnum: %lu\n", stat.msg_cbytes, stat.msg_qbytes, stat.msg_qnum);*/
 
   rb_define_method(rb_cObject, "rbtrace", rbtrace, 1);

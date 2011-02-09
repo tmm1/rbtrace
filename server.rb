@@ -1,5 +1,8 @@
 puts Process.pid
 require 'ext/rbtrace'
+
 while true
-  sleep rand*1
+  Dir.chdir("/tmp") do
+    sleep rand*0.5
+  end
 end

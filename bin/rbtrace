@@ -69,30 +69,49 @@ module MsgQ
 end
 
 pid = ARGV[0].to_i
-q = MsgQ.msgget(pid, 0666)
-if q == -1
+func = ARGV[1] || 'sleep'
+
+qi = MsgQ.msgget(pid, 0666)
+qo = MsgQ.msgget(-pid, 0666)
+
+if qi == -1 || qo == -1
   raise 'invalid pid'
 else
-  p [:q=, q]
+  # p [:qi=, qi, :qo=, qo]
 
-  Process.kill 'URG', pid
-  while true
+  begin
     msg = EventMsg.new
-    ret = MsgQ.msgrcv(q, msg, 56, 0, 0)
+    msg[:mtype] = 1
+    msg[:buf].to_ptr.put_string(0, "add,#{func}")
+
+    ret = MsgQ.msgsnd(qo, msg, 56, 0)
     if ret == -1
       puts FFI::LastError.error
-      break
     else
-      line = msg[:buf].to_ptr.read_string
-      process_line(line)
+      Process.kill 'URG', pid
+
+      while true
+        msg = EventMsg.new
+        ret = MsgQ.msgrcv(qi, msg, 56, 0, 0)
+        if ret == -1
+          puts FFI::LastError.error
+          break
+        else
+          line = msg[:buf].to_ptr.read_string
+          process_line(line)
+        end
+      end
+    end
+  ensure
+    msg = EventMsg.new
+    msg[:mtype] = 1
+    msg[:buf].to_ptr.put_string(0, "del,#{func}")
+
+    ret = MsgQ.msgsnd(qo, msg, 56, 0)
+    if ret == -1
+      puts FFI::LastError.error
+    else
+      Process.kill 'URG', pid
     end
   end
-
-  # msg = EventMsg.new
-  # msg[:mtype] = 0
-  # msg[:buf].to_ptr.put_string(0, "add,sleep")
-  # ret = MsgQ.msgsnd(q, msg, 56, 0)
-  # puts ret
-  # puts FFI::LastError.error
-  # Process.kill 'URG', pid
 end
