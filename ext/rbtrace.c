@@ -1,5 +1,6 @@
 #include <inttypes.h>
 #include <errno.h>
+#include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -55,11 +56,13 @@ struct event_msg {
     fprintf(stderr, "\n");\
   } else {\
     struct event_msg msg;\
-    int ret = -1;\
+    int ret = -1, n = 0;\
     \
     msg.mtype = 1;\
     snprintf(msg.buf, sizeof(msg.buf), "%" PRIu64 "," format, usec, __VA_ARGS__);\
-    ret = msgsnd(mq_id, &msg, sizeof(msg)-sizeof(long), IPC_NOWAIT);\
+    \
+    for (n=0; n<10 && ret==-1; n++)\
+      ret = msgsnd(mq_id, &msg, sizeof(msg)-sizeof(long), IPC_NOWAIT);\
     if (ret == -1)\
       fprintf(stderr, "msgsnd(): %s\n", strerror(errno));\
   }\
@@ -170,13 +173,12 @@ out:
 }
 
 static int
-rbtracer_add(char *query, VALUE self, VALUE klass, ID mid)
+rbtracer_add(char *query)
 {
   int i;
   int tracer_id = -1;
   rbtracer_t *tracer = NULL;
 
-  if (!mid) goto out;
   if (num_tracers >= MAX_TRACERS) goto out;
 
   for (i=0; i<MAX_TRACERS; i++) {
@@ -187,6 +189,28 @@ rbtracer_add(char *query, VALUE self, VALUE klass, ID mid)
     }
   }
   if (!tracer) goto out;
+
+  char *index;
+  VALUE klass = 0, self = 0;
+  ID mid;
+
+  if (NULL != (index = rindex(query, '.'))) {
+    *index = 0;
+    self = rb_eval_string_protect(query, 0);
+    *index = '.';
+
+    mid = rb_intern(index+1);
+  } else if (NULL != (index = rindex(query, '#'))) {
+    *index = 0;
+    klass = rb_eval_string_protect(query, 0);
+    *index = '#';
+
+    mid = rb_intern(index+1);
+  } else {
+    mid = rb_intern(query);
+  }
+
+  if (!mid) goto out;
 
   memset(tracer, 0, sizeof(*tracer));
 
@@ -220,29 +244,10 @@ rbtrace(VALUE self, VALUE query)
 {
   Check_Type(query, T_STRING);
 
-  VALUE klass = 0, obj = 0;
-  ID mid;
-  int tracer_id = -1;
   char *str = RSTRING(query)->ptr;
-  char *index;
+  int tracer_id = -1;
 
-  if (NULL != (index = rindex(str, '.'))) {
-    *index = 0;
-    obj = rb_eval_string_protect(str, 0);
-    *index = '.';
-
-    mid = rb_intern(index+1);
-  } else if (NULL != (index = rindex(str, '#'))) {
-    *index = 0;
-    klass = rb_eval_string_protect(str, 0);
-    *index = '#';
-
-    mid = rb_intern(index+1);
-  } else {
-    mid = rb_intern(str);
-  }
-
-  tracer_id = rbtracer_add(str, obj, klass, mid);
+  tracer_id = rbtracer_add(str);
   return tracer_id == -1 ? Qfalse : Qtrue;
 }
 
@@ -251,8 +256,8 @@ untrace(VALUE self, VALUE query)
 {
   Check_Type(query, T_STRING);
 
-  int tracer_id = -1;
   char *str = RSTRING(query)->ptr;
+  int tracer_id = -1;
 
   tracer_id = rbtracer_remove(str, -1);
   return tracer_id == -1 ? Qfalse : Qtrue;
@@ -267,10 +272,43 @@ cleanup()
   }
 }
 
+static void
+sigurg(int signal)
+{
+  if (mq_id == -1) return;
+
+  struct event_msg msg;
+  char *query = NULL;
+  int len = 0;
+  int ret = -1;
+  int n = 0;
+
+  for (n=0; n<10 && ret==-1; n++)
+    ret = msgrcv(mq_id, &msg, sizeof(msg)-sizeof(long), 0, IPC_NOWAIT);
+
+  if (ret == -1) {
+    fprintf(stderr, "msgrcv(): %s\n", strerror(errno));
+  } else {
+    len = strlen(msg.buf);
+    if (msg.buf[len-1] == '\n')
+      msg.buf[len-1] = 0;
+
+    if (0 == strcmp("add,", msg.buf)) {
+      query = msg.buf + 4;
+      rbtracer_add(query);
+    } else if (0 == strcmp("del,", msg.buf)) {
+      query = msg.buf + 4;
+      rbtracer_remove(query, -1);
+    }
+  }
+}
+
 void
 Init_rbtrace()
 {
   atexit(cleanup);
+  signal(SIGURG, sigurg);
+
   memset(&tracers, 0, sizeof(tracers));
 
   mq_key = (key_t) getpid();
