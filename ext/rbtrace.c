@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 #include <strings.h>
 #include <sys/time.h>
 #include <time.h>
@@ -25,6 +26,7 @@ timeofday_usec()
 struct rbtracer_t {
   int id;
 
+  char *query;
   VALUE self;
   VALUE klass;
   ID mid;
@@ -59,7 +61,7 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
   }
 
   for (i=0, n=0; i<MAX_TRACERS && n<num_tracers; i++) {
-    if (tracers[i].mid) {
+    if (tracers[i].query) {
       n++;
 
       if (tracers[i].mid == mid) {
@@ -107,17 +109,32 @@ out:
 }
 
 static int
-rbtracer_remove(int id)
+rbtracer_remove(char *query, int id)
 {
+  int i;
   int tracer_id = -1;
   uint64_t usec = timeofday_usec();
+  rbtracer_t *tracer = NULL;
 
-  if (tracer_id >= MAX_TRACERS) goto out;
+  if (query) {
+    for (i=0; i<MAX_TRACERS; i++) {
+      if (tracers[i].query) {
+        if (0 == strcmp(query, tracers[i].query)) {
+          tracer = &tracers[i];
+          break;
+        }
+      }
+    }
+  } else {
+    if (id >= MAX_TRACERS) goto out;
+    tracer = &tracers[id];
+  }
 
-  rbtracer_t *tracer = &tracers[id];
-  if (tracer->id) {
+  if (tracer->query) {
     tracer_id = tracer->id;
     tracer->mid = 0;
+    free(tracer->query);
+    tracer->query = NULL;
 
     num_tracers--;
     if (num_tracers == 0)
@@ -127,9 +144,10 @@ rbtracer_remove(int id)
 out:
   fprintf(
     output,
-    "%llu,remove,%d\n",
+    "%llu,remove,%d,%s\n",
     usec,
-    tracer_id
+    tracer_id,
+    query
   );
   return tracer_id;
 }
@@ -146,7 +164,7 @@ rbtracer_add(char *query, VALUE self, VALUE klass, ID mid)
   if (num_tracers >= MAX_TRACERS) goto out;
 
   for (i=0; i<MAX_TRACERS; i++) {
-    if (!tracers[i].mid) {
+    if (!tracers[i].query) {
       tracer = &tracers[i];
       tracer_id = i;
       break;
@@ -160,6 +178,7 @@ rbtracer_add(char *query, VALUE self, VALUE klass, ID mid)
   tracer->self = self;
   tracer->klass = klass;
   tracer->mid = mid;
+  tracer->query = strdup(query);
 
   if (num_tracers == 0) {
     rb_add_event_hook(
@@ -183,14 +202,14 @@ out:
 }
 
 static VALUE
-rbtrace(VALUE self, VALUE method)
+rbtrace(VALUE self, VALUE query)
 {
-  Check_Type(method, T_STRING);
+  Check_Type(query, T_STRING);
 
   VALUE klass = 0, obj = 0;
   ID mid;
   int tracer_id = -1;
-  char *str = RSTRING(method)->ptr;
+  char *str = RSTRING(query)->ptr;
   char *index;
 
   if (NULL != (index = rindex(str, '.'))) {
@@ -213,6 +232,18 @@ rbtrace(VALUE self, VALUE method)
   return tracer_id == -1 ? Qfalse : Qtrue;
 }
 
+static VALUE
+untrace(VALUE self, VALUE query)
+{
+  Check_Type(query, T_STRING);
+
+  int tracer_id = -1;
+  char *str = RSTRING(query)->ptr;
+
+  tracer_id = rbtracer_remove(str, -1);
+  return tracer_id == -1 ? Qfalse : Qtrue;
+}
+
 void
 Init_rbtrace()
 {
@@ -220,4 +251,5 @@ Init_rbtrace()
   memset(&tracers, 0, sizeof(tracers));
 
   rb_define_method(rb_cObject, "rbtrace", rbtrace, 1);
+  rb_define_method(rb_cObject, "untrace", untrace, 1);
 }
