@@ -1,0 +1,98 @@
+#!/usr/bin/env ruby
+require 'rubygems'
+require 'ffi'
+
+def process_line(line)
+  @tracers ||= {}
+  @nesting ||= 0
+
+  time, event, id, *args = line.strip.split(',')
+  time = time.to_i
+  id = id.to_i
+  tracer = @tracers[id]
+
+  case event
+  when 'add'
+    name = args.first
+    @tracers[id] = {
+      :name => name,
+      :times => [],
+      :ctimes => []
+    }
+
+  when 'remove'
+    @tracers.delete(id)
+
+  when 'call','ccall'
+    method, is_singleton, klass = *args
+    is_singleton = (is_singleton == '1')
+    bucket = (event == 'call' ? :times : :ctimes)
+
+    tracer[bucket] << time
+
+    if @nesting > 0
+      puts
+      print '   '*@nesting
+    end
+    print klass
+    print is_singleton ? '.' : '#'
+    print method
+    print ' '
+
+    @nesting += 1
+
+  when 'return','creturn'
+    @nesting -= 1 if @nesting > 0
+
+    bucket = (event == 'return' ? :times : :ctimes)
+    if start = tracer[bucket].pop
+      diff = time - start
+
+      print '   '*@nesting
+      puts "<%f>" % (diff/1_000_000.0)
+    end
+  end
+end
+
+class EventMsg < FFI::Struct
+  layout :mtype, :long,
+         :buf, [:char, 56]
+end
+
+
+module MsgQ
+  extend FFI::Library
+  ffi_lib 'c'
+  attach_function :msgget, [:int, :int], :int
+  attach_function :msgrcv, [:int, EventMsg.ptr, :size_t, :long, :int], :int
+  attach_function :msgsnd, [:int, EventMsg.ptr, :size_t, :int], :int
+end
+
+pid = ARGV[0].to_i
+q = MsgQ.msgget(pid, 0666)
+if q == -1
+  raise 'invalid pid'
+else
+  p [:q=, q]
+
+  Process.kill 'URG', pid
+  while true
+    msg = EventMsg.new
+    ret = MsgQ.msgrcv(q, msg, 56, 0, 0)
+    if ret == -1
+      puts FFI::LastError.error
+      break
+    else
+      line = msg[:buf].to_ptr.read_string
+      process_line(line)
+    end
+  end
+
+  # msg = EventMsg.new
+  # msg[:mtype] = 0
+  # msg[:buf].to_ptr.put_string(0, "add,sleep")
+  # ret = MsgQ.msgsnd(q, msg, 56, 0)
+  # puts ret
+  # puts FFI::LastError.error
+  # Process.kill 'URG', pid
+end

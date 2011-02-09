@@ -16,6 +16,7 @@
 
 #include <ruby.h>
 #include <node.h>
+#include <intern.h>
 
 static uint64_t
 timeofday_usec()
@@ -51,7 +52,7 @@ struct event_msg {
 
 #define SEND_EVENT(format, ...) do {\
   uint64_t usec = timeofday_usec();\
-  if (true) {\
+  if (false) {\
     fprintf(stderr, "%" PRIu64 "," format, usec, __VA_ARGS__);\
     fprintf(stderr, "\n");\
   } else {\
@@ -273,8 +274,16 @@ cleanup()
 }
 
 static void
+cleanup_ruby(VALUE data)
+{
+  cleanup();
+}
+
+static void
 sigurg(int signal)
 {
+  rbtracer_add("sleep");
+  return;
   if (mq_id == -1) return;
 
   struct event_msg msg;
@@ -293,6 +302,7 @@ sigurg(int signal)
     if (msg.buf[len-1] == '\n')
       msg.buf[len-1] = 0;
 
+    printf("ohai, got: %s\n", msg.buf);
     if (0 == strcmp("add,", msg.buf)) {
       query = msg.buf + 4;
       rbtracer_add(query);
@@ -307,6 +317,8 @@ void
 Init_rbtrace()
 {
   atexit(cleanup);
+  rb_set_end_proc(cleanup_ruby, 0);
+
   signal(SIGURG, sigurg);
 
   memset(&tracers, 0, sizeof(tracers));
