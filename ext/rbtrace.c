@@ -1,12 +1,17 @@
 #include <inttypes.h>
+#include <errno.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <sys/ipc.h>
+#include <sys/msg.h>
 #include <sys/time.h>
+#include <sys/types.h>
 #include <time.h>
+#include <unistd.h>
 
 #include <ruby.h>
 #include <node.h>
@@ -36,9 +41,29 @@ typedef struct rbtracer_t rbtracer_t;
 static rbtracer_t tracers[MAX_TRACERS];
 static unsigned int num_tracers = 0;
 
+key_t mq_key;
+int mq_id = -1;
+struct event_msg {
+  long mtype;
+  char buf[1];
+};
+
+#define SEND_EVENT(format, ...) do {\
+  if (true) {\
+    fprintf(stderr, format, __VA_ARGS__);\
+    fprintf(stderr, "\n");\
+    struct event_msg msg;\
+    int ret = -1;\
+    \
+    msg.mtype = 2;\
+    snprintf(msg.buf, 1, format, __VA_ARGS__);\
+    ret = msgsnd(mq_id, &msg, sizeof(msg)-sizeof(long), IPC_NOWAIT);\
+    if (ret == -1)\
+      fprintf(stderr, "msgsnd(): %s\n", strerror(errno));\
+  }\
+} while (0)
+
 static int in_event_hook = 0;
-static int nesting = 0;
-FILE *output = NULL;
 
 static void
 event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
@@ -49,7 +74,7 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
   in_event_hook++;
 
   int i, n;
-  uint64_t usec, diff;
+  uint64_t usec;
   rbtracer_t *tracer = NULL;
   bool singleton = 0;
 
@@ -80,9 +105,8 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
   switch (event) {
     case RUBY_EVENT_C_CALL:
     case RUBY_EVENT_CALL:
-      fprintf(
-        output,
-        "%llu,%s,%d,%s,%d,%s\n",
+      SEND_EVENT(
+        "%llu,%s,%d,%s,%d,%s",
         usec,
         event == RUBY_EVENT_CALL ? "call" : "ccall",
         tracer->id,
@@ -94,9 +118,8 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
 
     case RUBY_EVENT_C_RETURN:
     case RUBY_EVENT_RETURN:
-      fprintf(
-        output,
-        "%llu,%s,%d\n",
+      SEND_EVENT(
+        "%llu,%s,%d",
         usec,
         event == RUBY_EVENT_RETURN ? "return" : "creturn",
         tracer->id
@@ -142,9 +165,8 @@ rbtracer_remove(char *query, int id)
   }
 
 out:
-  fprintf(
-    output,
-    "%llu,remove,%d,%s\n",
+  SEND_EVENT(
+    "%llu,remove,%d,%s",
     usec,
     tracer_id,
     query
@@ -191,9 +213,8 @@ rbtracer_add(char *query, VALUE self, VALUE klass, ID mid)
   num_tracers++;
 
 out:
-  fprintf(
-    output,
-    "%llu,add,%d,%s\n",
+  SEND_EVENT(
+    "%llu,add,%d,%s",
     usec,
     tracer_id,
     query
@@ -244,11 +265,30 @@ untrace(VALUE self, VALUE query)
   return tracer_id == -1 ? Qfalse : Qtrue;
 }
 
+static void
+cleanup()
+{
+  if (mq_id != -1) {
+    msgctl(mq_id, IPC_RMID, NULL);
+    mq_id = -1;
+  }
+}
+
 void
 Init_rbtrace()
 {
-  if (!output) output = stdout;
+  /* atexit(cleanup);*/
   memset(&tracers, 0, sizeof(tracers));
+
+  mq_key = (key_t) 1234;//getpid();
+  mq_id  = msgget(mq_key, 0666 | IPC_CREAT);
+
+  if (mq_id == -1)
+    rb_sys_fail("msgget");
+
+  struct msqid_ds stat;
+  msgctl(mq_id, IPC_STAT, &stat);
+  printf("cbytes: %lu, qbytes: %lu, qnum: %lu\n", stat.msg_cbytes, stat.msg_qbytes, stat.msg_qnum);
 
   rb_define_method(rb_cObject, "rbtrace", rbtrace, 1);
   rb_define_method(rb_cObject, "untrace", untrace, 1);

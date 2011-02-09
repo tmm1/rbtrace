@@ -36,8 +36,6 @@ rbtrace 'Slow.something'
 rbtrace 'Do::It#something'
 rbtrace '[]='
 rbtrace 'call'
-untrace '[]='
-rbtrace '[]='
 
 1.times do
   Slow.something
