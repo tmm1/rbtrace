@@ -67,7 +67,6 @@ class EventMsg < FFI::Struct
          :buf, [:char, 56]
 end
 
-
 module MsgQ
   extend FFI::Library
   ffi_lib 'c'
@@ -75,6 +74,8 @@ module MsgQ
   attach_function :msgrcv, [:int, EventMsg.ptr, :size_t, :long, :int], :int
   attach_function :msgsnd, [:int, EventMsg.ptr, :size_t, :int], :int
 end
+
+raise 'invalid pid' unless ARGV[0]
 
 pid = ARGV[0].to_i
 func = ARGV[1] || 'sleep'
