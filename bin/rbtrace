@@ -22,7 +22,7 @@ module RBTracer
         @tracers[id] = {
           :name => name,
           :times => [],
-          :ctimes => []
+          :names => []
         }
       end
 
@@ -36,17 +36,14 @@ module RBTracer
     when 'call','ccall'
       method, is_singleton, klass = *args
       is_singleton = (is_singleton == '1')
-      bucket = (event == 'call' ? :times : :ctimes)
+      name = "#{klass}#{ is_singleton ? '.' : '#' }#{method}"
 
-      tracer[bucket] << time
+      tracer[:times] << time
+      tracer[:names] << name
 
       puts
-      if @nesting > 0
-        print '   '*@nesting
-      end
-      print klass
-      print is_singleton ? '.' : '#'
-      print method
+      print '   '*@nesting if @nesting > 0
+      print name
 
       @nesting += 1
       @last_tracer = tracer
@@ -54,16 +51,17 @@ module RBTracer
     when 'return','creturn'
       @nesting -= 1 if @nesting > 0
 
-      bucket = (event == 'return' ? :times : :ctimes)
-      if start = tracer[bucket].pop
+      if start = tracer[:times].pop
+        name = tracer[:names].pop
         diff = time - start
 
-        if tracer == @last_tracer
-          print ' '
-        else
+        unless tracer == @last_tracer
           puts
+          print '   '*@nesting if @nesting > 0
+          print name
         end
-        print '<%f>' % (diff/1_000_000.0)
+        print ' <%f>' % (diff/1_000_000.0)
+        puts if @nesting == 0 and tracer != @last_tracer
       end
 
     when 'slow', 'cslow'

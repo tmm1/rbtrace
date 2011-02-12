@@ -14,7 +14,7 @@ like strace, but for ruby code
         Dir.chdir("/tmp") do
           Dir.pwd
           Process.pid
-          ("hi"*5).gsub('hi', 'hello')
+          'hi'.gsub('hi'){ |match| match*2 }
           sleep rand*0.5
         end
       }.call
@@ -42,29 +42,23 @@ like strace, but for ruby code
 
 ### trace multiple functions
 
-    % ./bin/rbtrace 95532 Dir.chdir sleep Dir.pwd Process.pid "String#gsub" "String#*"
+    % ./bin/rbtrace 95532 sleep Dir.chdir Dir.pwd Process.pid "String#gsub" "String#*"
 
     Dir.chdir
-       Dir.pwd <0.000029>
-       Process.pid <0.000007>
-       String#* <0.000008>
-       String#gsub <0.000032>
-       Kernel#sleep <0.364838>
-    <0.365453>
+       Dir.pwd <0.000094>
+       Process.pid <0.000016>
+       String#gsub
+          String#* <0.000020>
+       String#gsub <0.000072>
+       Kernel#sleep <0.369630>
+    Dir.chdir <0.370220>
+
     Dir.chdir
-       Dir.pwd <0.000028>
-       Process.pid <0.000007>
-       String#* <0.000008>
-       String#gsub <0.000019>
-       Kernel#sleep <0.068568>
-    <0.068808>
-    Dir.chdir
-       Dir.pwd <0.000042>
-       Process.pid <0.000067>
-       String#* <0.000012>
-       String#gsub <0.000015>
-       Kernel#sleep <0.369132>
-    <0.370278>
+       Dir.pwd <0.000088>
+       Process.pid <0.000017>
+       String#gsub
+          String#* <0.000020>
+       String#gsub <0.000071>
     ^C./bin/rbtrace:113: Interrupt
 
 ### watch for method calls slower than 250ms

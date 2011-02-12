@@ -5,7 +5,7 @@ while true
     Dir.chdir("/tmp") do
       Dir.pwd
       Process.pid
-      ("hi"*5).gsub('hi', 'hello')
+      'hi'.gsub('hi'){ |match| match*2 }
       sleep rand*0.5
     end
   }.call
