@@ -155,7 +155,7 @@ if qi == -1 || qo == -1
 else
   begin
     if funcs == ['watch']
-      EventMsg.send_cmd(qo, 'watch')
+      EventMsg.send_cmd(qo, 'watch,250')
       Process.kill 'URG', pid
     else
       funcs.each do |func|

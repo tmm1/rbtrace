@@ -76,7 +76,12 @@ static struct {
   bool enabled;
   uint64_t call_times[ MAX_CALLS ];
   int num_calls;
-} slow_tracer = { .enabled = false, .num_calls = 0 };
+  uint32_t threshold;
+} slow_tracer = {
+  .enabled = false,
+  .num_calls = 0,
+  .threshold = 250
+};
 
 static void
 event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
@@ -122,7 +127,7 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
         break;
     }
 
-    if (diff > 250 * 1e3) {
+    if (diff > slow_tracer.threshold * 1e3) {
       SEND_EVENT(
         "%s,-1,%" PRIu64 ",%d,%s,%d,%s",
         event == RUBY_EVENT_RETURN ? "slow" : "cslow",
@@ -324,12 +329,14 @@ out:
 }
 
 static void
-rbtracer_watch()
+rbtracer_watch(uint32_t threshold)
 {
   if (!slow_tracer.enabled) {
     slow_tracer.num_calls = 0;
-    event_hook_install();
+    slow_tracer.threshold = threshold;
     slow_tracer.enabled = true;
+
+    event_hook_install();
   }
 }
 
@@ -338,6 +345,7 @@ rbtracer_unwatch()
 {
   if (slow_tracer.enabled) {
     event_hook_remove();
+
     slow_tracer.enabled = false;
   }
 }
@@ -419,8 +427,14 @@ sigurg(int signal)
       } else if (0 == strncmp("delall", msg.buf, 6)) {
         rbtracer_remove_all();
 
-      } else if (0 == strncmp("watch", msg.buf, 5)) {
-        rbtracer_watch();
+      } else if (0 == strncmp("watch,", msg.buf, 6)) {
+        int msec = 250;
+
+        query = msg.buf + 6;
+        if (query && *query)
+          msec = atoi(query);
+
+        rbtracer_watch(msec);
 
       } else if (0 == strncmp("unwatch", msg.buf, 7)) {
         rbtracer_unwatch();
