@@ -62,8 +62,7 @@ def process_line(line)
       else
         puts
       end
-      print '   '*@nesting
-      print "<%f>" % (diff/1_000_000.0)
+      print '<%f>' % (diff/1_000_000.0)
     end
 
   when 'slow', 'cslow'

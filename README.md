@@ -45,25 +45,25 @@ like strace, but for ruby code
     % ./bin/rbtrace 95532 Dir.chdir sleep Dir.pwd Process.pid "String#gsub" "String#*"
 
     Dir.chdir
-       Dir.pwd    <0.000029>
-       Process.pid    <0.000007>
-       String#*    <0.000008>
-       String#gsub    <0.000032>
-       Kernel#sleep    <0.364838>
+       Dir.pwd <0.000029>
+       Process.pid <0.000007>
+       String#* <0.000008>
+       String#gsub <0.000032>
+       Kernel#sleep <0.364838>
     <0.365453>
     Dir.chdir
-       Dir.pwd    <0.000028>
-       Process.pid    <0.000007>
-       String#*    <0.000008>
-       String#gsub    <0.000019>
-       Kernel#sleep    <0.068568>
+       Dir.pwd <0.000028>
+       Process.pid <0.000007>
+       String#* <0.000008>
+       String#gsub <0.000019>
+       Kernel#sleep <0.068568>
     <0.068808>
     Dir.chdir
-       Dir.pwd    <0.000042>
-       Process.pid    <0.000067>
-       String#*    <0.000012>
-       String#gsub    <0.000015>
-       Kernel#sleep    <0.369132>
+       Dir.pwd <0.000042>
+       Process.pid <0.000067>
+       String#* <0.000012>
+       String#gsub <0.000015>
+       Kernel#sleep <0.369132>
     <0.370278>
     ^C./bin/rbtrace:113: Interrupt
 
