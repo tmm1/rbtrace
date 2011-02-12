@@ -10,7 +10,7 @@ def process_line(line)
   time, event, id, *args = line.strip.split(',')
   time = time.to_i
   id = id.to_i
-  tracer = @tracers[id]
+  tracer = @tracers[id] if id > -1
 
   case event
   when 'add'
@@ -57,20 +57,71 @@ def process_line(line)
     if start = tracer[bucket].pop
       diff = time - start
 
-      puts unless tracer == @last_tracer
+      if tracer == @last_tracer
+        print ' '
+      else
+        puts
+      end
       print '   '*@nesting
       print "<%f>" % (diff/1_000_000.0)
     end
+
+  when 'slow', 'cslow'
+    diff, nesting, method, is_singleton, klass = *args
+    nesting = nesting.to_i
+    diff = diff.to_i
+    is_singleton = (is_singleton == '1')
+
+    if nesting > 0
+      print '   '*nesting
+    end
+    print klass
+    print is_singleton ? '.' : '#'
+    print method
+    print ' '
+    puts "<%f>" % (diff/1_000_000.0)
+    puts if nesting == 0
+
+  else
+    puts "unknown event: #{line}"
+
   end
 end
 
 class EventMsg < FFI::Struct
   layout :mtype, :long,
          :buf, [:char, 56]
+
+  def self.send_cmd(q, str)
+    msg = EventMsg.new
+    msg[:mtype] = 1
+    msg[:buf].to_ptr.put_string(0, str)
+
+    ret = MsgQ.msgsnd(q, msg, 56, 0)
+    FFI::LastError.raise if ret == -1
+  end
+
+  def self.recv_cmd(q)
+    msg = EventMsg.new
+    ret = MsgQ.msgrcv(q, msg, 56, 0, 0)
+    FFI::LastError.raise if ret == -1
+
+    msg[:buf].to_ptr.read_string
+  end
+end
+
+module FFI::LastError
+  def self.raise(msg=nil)
+    errno = error
+    exception = Errno::constants.map(&Errno.method(:const_get)).find{ |c| c.const_get(:Errno) == errno }
+
+    raise exception, msg
+  end
 end
 
 module MsgQ
   extend FFI::Library
+
   ffi_lib 'c'
   attach_function :msgget, [:int, :int], :int
   attach_function :msgrcv, [:int, EventMsg.ptr, :size_t, :long, :int], :int
@@ -79,7 +130,19 @@ end
 
 raise 'invalid pid' unless ARGV[0]
 
-pid = ARGV[0].to_i
+begin
+  raise ArgumentError unless pid = ARGV[0]
+  pid = pid.to_i
+  raise ArgumentError unless pid > 0
+  Process.kill(0,pid)
+rescue TypeError, ArgumentError
+  raise 'pid required'
+rescue Errno::ESRCH
+  raise 'invalid pid'
+rescue Errno::EPERM
+  raise 'could not signal process (run as root)'
+end
+
 funcs = [ARGV[1] || 'sleep']
 if ARGV.size > 2
   funcs += ARGV[2..-1]
@@ -91,42 +154,22 @@ qo = MsgQ.msgget(-pid, 0666)
 if qi == -1 || qo == -1
   raise 'invalid pid'
 else
-  # p [:qi=, qi, :qo=, qo]
-
   begin
-    funcs.each do |func|
-      msg = EventMsg.new
-      msg[:mtype] = 1
-      msg[:buf].to_ptr.put_string(0, "add,#{func}")
-
-      ret = MsgQ.msgsnd(qo, msg, 56, 0)
+    if funcs == ['watch']
+      EventMsg.send_cmd(qo, 'watch')
       Process.kill 'URG', pid
-      if ret == -1
-        puts FFI::LastError.error
-        raise 'msgsnd failed'
+    else
+      funcs.each do |func|
+        EventMsg.send_cmd(qo, "add,#{func}")
+        Process.kill 'URG', pid
       end
     end
 
     while true
-      msg = EventMsg.new
-      ret = MsgQ.msgrcv(qi, msg, 56, 0, 0)
-      if ret == -1
-        puts FFI::LastError.error
-        break
-      else
-        line = msg[:buf].to_ptr.read_string
-        process_line(line)
-      end
+      process_line EventMsg.recv_cmd(qi)
     end
   ensure
-    msg = EventMsg.new
-    msg[:mtype] = 1
-    msg[:buf].to_ptr.put_string(0, "delall")
-
-    ret = MsgQ.msgsnd(qo, msg, 56, 0)
+    EventMsg.send_cmd(qo, funcs == ['watch'] ? 'unwatch' : 'delall')
     Process.kill 'URG', pid
-    if ret == -1
-      puts FFI::LastError.error
-    end
   end
 end

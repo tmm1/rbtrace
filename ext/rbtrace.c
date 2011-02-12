@@ -27,9 +27,6 @@ timeofday_usec()
   return (uint64_t)tv.tv_sec*1e6 + (uint64_t)tv.tv_usec;
 }
 
-#define MAX_TRACERS 100
-#define MAX_CALLS 10
-
 struct rbtracer_t {
   int id;
 
@@ -40,6 +37,7 @@ struct rbtracer_t {
 };
 typedef struct rbtracer_t rbtracer_t;
 
+#define MAX_TRACERS 100
 static rbtracer_t tracers[MAX_TRACERS];
 static unsigned int num_tracers = 0;
 
@@ -72,25 +70,90 @@ struct event_msg {
 
 static int in_event_hook = 0;
 static bool event_hook_installed = false;
+static bool tracer_watching = false;
+
+#define MAX_CALLS 4096
+static uint64_t call_times[MAX_CALLS], ccall_times[MAX_CALLS];
+static int call_time_idx = 0, ccall_time_idx = 0;
 
 static void
 event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
 {
-  if (num_tracers == 0) return;
+  // do not re-enter this function
+  // after this, must `goto out` instead of `return`
   if (in_event_hook) return;
-  if (mid == ID_ALLOCATOR) return;
   in_event_hook++;
 
-  int i, n;
-  rbtracer_t *tracer = NULL;
-  bool singleton = 0;
+  // skip allocators
+  if (mid == ID_ALLOCATOR) goto out;
 
+  // normal klass and test for class-level methods
+  bool singleton = 0;
   if (klass) {
     if (TYPE(klass) == T_ICLASS) {
       klass = RBASIC(klass)->klass;
     }
     singleton = FL_TEST(klass, FL_SINGLETON);
   }
+
+  // are we watching for any slow methods?
+  if (tracer_watching) {
+    uint64_t usec = timeofday_usec(), diff = 0;
+
+    switch (event) {
+      case RUBY_EVENT_C_CALL:
+        if (ccall_time_idx < MAX_CALLS)
+          ccall_times[ ccall_time_idx++ ] = usec;
+        else
+          ccall_time_idx++;
+        break;
+
+      case RUBY_EVENT_CALL:
+        if (call_time_idx < MAX_CALLS)
+          call_times[ call_time_idx++ ] = usec;
+        else
+          call_time_idx++;
+        break;
+
+      case RUBY_EVENT_C_RETURN:
+        if (ccall_time_idx > 0) {
+          if (ccall_time_idx > MAX_CALLS)
+            ccall_time_idx--;
+          else
+            diff = usec - ccall_times[ --ccall_time_idx ];
+        }
+        break;
+
+      case RUBY_EVENT_RETURN:
+        if (call_time_idx > 0) {
+          if (call_time_idx > MAX_CALLS)
+            call_time_idx--;
+          else
+            diff = usec - call_times[ --call_time_idx ];
+        }
+        break;
+    }
+
+    if (diff > 250 * 1e3) {
+      SEND_EVENT(
+        "%s,-1,%" PRIu64 ",%d,%s,%d,%s",
+        event == RUBY_EVENT_RETURN ? "slow" : "cslow",
+        diff,
+        event == RUBY_EVENT_RETURN ? call_time_idx : ccall_time_idx,
+        rb_id2name(mid),
+        singleton,
+        klass ? rb_class2name(singleton ? self : klass) : ""
+      );
+    }
+
+    goto out;
+  }
+
+  // are there specific methods we're waiting for?
+  if (num_tracers == 0) goto out;
+
+  int i, n;
+  rbtracer_t *tracer = NULL;
 
   for (i=0, n=0; i<MAX_TRACERS && n<num_tracers; i++) {
     if (tracers[i].query) {
@@ -105,6 +168,8 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
       }
     }
   }
+
+  // no matching method tracer found, so bail!
   if (!tracer) goto out;
 
   switch (event) {
@@ -270,6 +335,27 @@ out:
   return tracer_id;
 }
 
+static void
+rbtracer_watch()
+{
+  if (!tracer_watching) {
+    call_time_idx = 0;
+    ccall_time_idx = 0;
+
+    event_hook_install();
+    tracer_watching = true;
+  }
+}
+
+static void
+rbtracer_unwatch()
+{
+  if (tracer_watching) {
+    event_hook_remove();
+    tracer_watching = false;
+  }
+}
+
 static VALUE
 rbtrace(VALUE self, VALUE query)
 {
@@ -339,11 +425,20 @@ sigurg(int signal)
       if (0 == strncmp("add,", msg.buf, 4)) {
         query = msg.buf + 4;
         rbtracer_add(query);
+
       } else if (0 == strncmp("del,", msg.buf, 4)) {
         query = msg.buf + 4;
         rbtracer_remove(query, -1);
+
       } else if (0 == strncmp("delall", msg.buf, 6)) {
         rbtracer_remove_all();
+
+      } else if (0 == strncmp("watch", msg.buf, 5)) {
+        rbtracer_watch();
+
+      } else if (0 == strncmp("unwatch", msg.buf, 7)) {
+        rbtracer_unwatch();
+
       }
     }
   }

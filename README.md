@@ -10,12 +10,14 @@ like strace, but for ruby code
     require 'ext/rbtrace'
 
     while true
-      Dir.chdir("/tmp") do
-        Dir.pwd
-        Process.pid
-        ("hi"*5).gsub('hi', 'hello')
-        sleep rand*0.5
-      end
+      proc {
+        Dir.chdir("/tmp") do
+          Dir.pwd
+          Process.pid
+          ("hi"*5).gsub('hi', 'hello')
+          sleep rand*0.5
+        end
+      }.call
     end
 
 ### run the process
@@ -64,3 +66,21 @@ like strace, but for ruby code
        Kernel#sleep    <0.369132>
     <0.370278>
     ^C./bin/rbtrace:113: Interrupt
+
+### watch for method calls slower than 250ms
+
+    % ./bin/rbtrace 95532 watch
+          Kernel#sleep <0.402916>
+       Dir.chdir <0.403122>
+    Proc#call <0.403152>
+
+          Kernel#sleep <0.390635>
+       Dir.chdir <0.390937>
+    Proc#call <0.390983>
+
+          Kernel#sleep <0.399413>
+       Dir.chdir <0.399753>
+    Proc#call <0.399797>
+
+    ^C./bin/rbtrace:113: Interrupt
+
