@@ -13,6 +13,7 @@ like strace, but for ruby code
       Dir.chdir("/tmp") do
         Dir.pwd
         Process.pid
+        ("hi"*5).gsub('hi', 'hello')
         sleep rand*0.5
       end
     end
@@ -39,22 +40,27 @@ like strace, but for ruby code
 
 ### trace multiple functions
 
-    % ./bin/rbtrace 95532 Dir.chdir sleep Dir.pwd Process.pid
+    % ./bin/rbtrace 95532 Dir.chdir sleep Dir.pwd Process.pid "String#gsub" "String#*"
 
     Dir.chdir
-       Dir.pwd    <0.000057>
-       Process.pid    <0.000015>
-       Kernel#sleep    <0.153867>
-    <0.154228>
+       Dir.pwd    <0.000029>
+       Process.pid    <0.000007>
+       String#*    <0.000008>
+       String#gsub    <0.000032>
+       Kernel#sleep    <0.364838>
+    <0.365453>
     Dir.chdir
-       Dir.pwd    <0.000221>
-       Process.pid    <0.000008>
-       Kernel#sleep    <0.427436>
-    <0.427923>
+       Dir.pwd    <0.000028>
+       Process.pid    <0.000007>
+       String#*    <0.000008>
+       String#gsub    <0.000019>
+       Kernel#sleep    <0.068568>
+    <0.068808>
     Dir.chdir
-       Dir.pwd    <0.000057>
-       Process.pid    <0.000013>
-       Kernel#sleep    <0.267780>
-    <0.268102>
+       Dir.pwd    <0.000042>
+       Process.pid    <0.000067>
+       String#*    <0.000012>
+       String#gsub    <0.000015>
+       Kernel#sleep    <0.369132>
+    <0.370278>
     ^C./bin/rbtrace:113: Interrupt
-

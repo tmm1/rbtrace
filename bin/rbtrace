@@ -46,7 +46,6 @@ def process_line(line)
     print klass
     print is_singleton ? '.' : '#'
     print method
-    print ' '
 
     @nesting += 1
     @last_tracer = tracer
