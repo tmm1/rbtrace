@@ -23,7 +23,6 @@ timeofday_usec()
 {
   struct timeval tv;
   gettimeofday(&tv, NULL);
-  /* return (uint64_t)tv.tv_sec*1e3 + (uint64_t)tv.tv_usec*1e-3;*/
   return (uint64_t)tv.tv_sec*1e6 + (uint64_t)tv.tv_usec;
 }
 
@@ -94,7 +93,7 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
   // skip allocators
   if (mid == ID_ALLOCATOR) goto out;
 
-  // normal klass and test for class-level methods
+  // normalize klass and check for class-level methods
   bool singleton = 0;
   if (klass) {
     if (TYPE(klass) == T_ICLASS) {
@@ -111,18 +110,18 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
       case RUBY_EVENT_C_CALL:
       case RUBY_EVENT_CALL:
         if (slow_tracer.num_calls < MAX_CALLS)
-          slow_tracer.call_times[ slow_tracer.num_calls++ ] = usec;
-        else
-          slow_tracer.num_calls++;
+          slow_tracer.call_times[ slow_tracer.num_calls ] = usec;
+
+        slow_tracer.num_calls++;
         break;
 
       case RUBY_EVENT_C_RETURN:
       case RUBY_EVENT_RETURN:
         if (slow_tracer.num_calls > 0) {
-          if (slow_tracer.num_calls > MAX_CALLS)
-            slow_tracer.num_calls--;
-          else
-            diff = usec - slow_tracer.call_times[ --slow_tracer.num_calls ];
+          slow_tracer.num_calls--;
+
+          if (slow_tracer.num_calls < MAX_CALLS)
+            diff = usec - slow_tracer.call_times[ slow_tracer.num_calls ];
         }
         break;
     }
