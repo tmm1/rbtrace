@@ -63,7 +63,7 @@ like strace, but for ruby code
 
 ### watch for method calls slower than 250ms
 
-    % ./bin/rbtrace 95532 watch
+    % ./bin/rbtrace 95532 watch 250
           Kernel#sleep <0.402916>
        Dir.chdir <0.403122>
     Proc#call <0.403152>

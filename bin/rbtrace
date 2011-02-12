@@ -154,8 +154,8 @@ if qi == -1 || qo == -1
   raise 'invalid pid'
 else
   begin
-    if funcs == ['watch']
-      EventMsg.send_cmd(qo, 'watch,250')
+    if funcs.first == 'watch'
+      EventMsg.send_cmd(qo, funcs.join(','))
       Process.kill 'URG', pid
     else
       funcs.each do |func|
@@ -168,7 +168,7 @@ else
       RBTracer.process_line EventMsg.recv_cmd(qi)
     end
   ensure
-    EventMsg.send_cmd(qo, funcs == ['watch'] ? 'unwatch' : 'delall')
+    EventMsg.send_cmd(qo, funcs.first == 'watch' ? 'unwatch' : 'delall')
     Process.kill 'URG', pid
   end
 end
