@@ -5,6 +5,7 @@ require 'ffi'
 def process_line(line)
   @tracers ||= {}
   @nesting ||= 0
+  @last_tracer ||= nil
 
   time, event, id, *args = line.strip.split(',')
   time = time.to_i
@@ -38,8 +39,8 @@ def process_line(line)
 
     tracer[bucket] << time
 
+    puts
     if @nesting > 0
-      puts
       print '   '*@nesting
     end
     print klass
@@ -48,6 +49,7 @@ def process_line(line)
     print ' '
 
     @nesting += 1
+    @last_tracer = tracer
 
   when 'return','creturn'
     @nesting -= 1 if @nesting > 0
@@ -56,8 +58,9 @@ def process_line(line)
     if start = tracer[bucket].pop
       diff = time - start
 
+      puts unless tracer == @last_tracer
       print '   '*@nesting
-      puts "<%f>" % (diff/1_000_000.0)
+      print "<%f>" % (diff/1_000_000.0)
     end
   end
 end
@@ -78,7 +81,10 @@ end
 raise 'invalid pid' unless ARGV[0]
 
 pid = ARGV[0].to_i
-func = ARGV[1] || 'sleep'
+funcs = [ARGV[1] || 'sleep']
+if ARGV.size > 2
+  funcs += ARGV[2..-1]
+end
 
 qi = MsgQ.msgget(pid, 0666)
 qo = MsgQ.msgget(-pid, 0666)
@@ -89,38 +95,39 @@ else
   # p [:qi=, qi, :qo=, qo]
 
   begin
-    msg = EventMsg.new
-    msg[:mtype] = 1
-    msg[:buf].to_ptr.put_string(0, "add,#{func}")
+    funcs.each do |func|
+      msg = EventMsg.new
+      msg[:mtype] = 1
+      msg[:buf].to_ptr.put_string(0, "add,#{func}")
 
-    ret = MsgQ.msgsnd(qo, msg, 56, 0)
-    if ret == -1
-      puts FFI::LastError.error
-    else
+      ret = MsgQ.msgsnd(qo, msg, 56, 0)
       Process.kill 'URG', pid
+      if ret == -1
+        puts FFI::LastError.error
+        raise 'msgsnd failed'
+      end
+    end
 
-      while true
-        msg = EventMsg.new
-        ret = MsgQ.msgrcv(qi, msg, 56, 0, 0)
-        if ret == -1
-          puts FFI::LastError.error
-          break
-        else
-          line = msg[:buf].to_ptr.read_string
-          process_line(line)
-        end
+    while true
+      msg = EventMsg.new
+      ret = MsgQ.msgrcv(qi, msg, 56, 0, 0)
+      if ret == -1
+        puts FFI::LastError.error
+        break
+      else
+        line = msg[:buf].to_ptr.read_string
+        process_line(line)
       end
     end
   ensure
     msg = EventMsg.new
     msg[:mtype] = 1
-    msg[:buf].to_ptr.put_string(0, "del,#{func}")
+    msg[:buf].to_ptr.put_string(0, "delall")
 
     ret = MsgQ.msgsnd(qo, msg, 56, 0)
+    Process.kill 'URG', pid
     if ret == -1
       puts FFI::LastError.error
-    else
-      Process.kill 'URG', pid
     end
   end
 end

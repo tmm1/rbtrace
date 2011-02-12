@@ -71,6 +71,7 @@ struct event_msg {
 } while (0)
 
 static int in_event_hook = 0;
+static bool event_hook_installed = false;
 
 static void
 event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
@@ -133,6 +134,28 @@ out:
   in_event_hook--;
 }
 
+static void
+event_hook_install()
+{
+  if (!event_hook_installed) {
+    rb_add_event_hook(
+      event_hook,
+      RUBY_EVENT_CALL   | RUBY_EVENT_C_CALL |
+      RUBY_EVENT_RETURN | RUBY_EVENT_C_RETURN
+    );
+    event_hook_installed = true;
+  }
+}
+
+static void
+event_hook_remove()
+{
+  if (event_hook_installed) {
+    rb_remove_event_hook(event_hook);
+    event_hook_installed = false;
+  }
+}
+
 static int
 rbtracer_remove(char *query, int id)
 {
@@ -162,7 +185,7 @@ rbtracer_remove(char *query, int id)
 
     num_tracers--;
     if (num_tracers == 0)
-      rb_remove_event_hook(event_hook);
+      event_hook_remove();
   }
 
 out:
@@ -172,6 +195,17 @@ out:
     query
   );
   return tracer_id;
+}
+
+static void
+rbtracer_remove_all()
+{
+  int i;
+  for (i=0; i<MAX_TRACERS; i++) {
+    if (tracers[i].query) {
+      rbtracer_remove(NULL, i);
+    }
+  }
 }
 
 static int
@@ -222,13 +256,8 @@ rbtracer_add(char *query)
   tracer->mid = mid;
   tracer->query = strdup(query);
 
-  if (num_tracers == 0) {
-    rb_add_event_hook(
-      event_hook,
-      RUBY_EVENT_CALL   | RUBY_EVENT_C_CALL |
-      RUBY_EVENT_RETURN | RUBY_EVENT_C_RETURN
-    );
-  }
+  if (num_tracers == 0)
+    event_hook_install();
 
   num_tracers++;
 
@@ -292,25 +321,30 @@ sigurg(int signal)
   struct event_msg msg;
   char *query = NULL;
   int len = 0;
-  int ret = -1;
   int n = 0;
 
-  for (n=0; n<10 && ret==-1; n++)
-    ret = msgrcv(mqi_id, &msg, sizeof(msg)-sizeof(long), 0, IPC_NOWAIT);
+  while (true) {
+    int ret = -1;
 
-  if (ret == -1) {
-    fprintf(stderr, "msgrcv(): %s\n", strerror(errno));
-  } else {
-    len = strlen(msg.buf);
-    if (msg.buf[len-1] == '\n')
-      msg.buf[len-1] = 0;
+    for (n=0; n<10 && ret==-1; n++)
+      ret = msgrcv(mqi_id, &msg, sizeof(msg)-sizeof(long), 0, IPC_NOWAIT);
 
-    if (0 == strncmp("add,", msg.buf, 4)) {
-      query = msg.buf + 4;
-      rbtracer_add(query);
-    } else if (0 == strncmp("del,", msg.buf, 4)) {
-      query = msg.buf + 4;
-      rbtracer_remove(query, -1);
+    if (ret == -1) {
+      break;
+    } else {
+      len = strlen(msg.buf);
+      if (msg.buf[len-1] == '\n')
+        msg.buf[len-1] = 0;
+
+      if (0 == strncmp("add,", msg.buf, 4)) {
+        query = msg.buf + 4;
+        rbtracer_add(query);
+      } else if (0 == strncmp("del,", msg.buf, 4)) {
+        query = msg.buf + 4;
+        rbtracer_remove(query, -1);
+      } else if (0 == strncmp("delall", msg.buf, 6)) {
+        rbtracer_remove_all();
+      }
     }
   }
 }
