@@ -70,11 +70,13 @@ struct event_msg {
 
 static int in_event_hook = 0;
 static bool event_hook_installed = false;
-static bool tracer_watching = false;
 
 #define MAX_CALLS 4096
-static uint64_t call_times[MAX_CALLS], ccall_times[MAX_CALLS];
-static int call_time_idx = 0, ccall_time_idx = 0;
+static struct {
+  bool enabled;
+  uint64_t call_times[ MAX_CALLS ];
+  int num_calls;
+} slow_tracer = { .enabled = false, .num_calls = 0 };
 
 static void
 event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
@@ -97,39 +99,25 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
   }
 
   // are we watching for any slow methods?
-  if (tracer_watching) {
+  if (slow_tracer.enabled) {
     uint64_t usec = timeofday_usec(), diff = 0;
 
     switch (event) {
       case RUBY_EVENT_C_CALL:
-        if (ccall_time_idx < MAX_CALLS)
-          ccall_times[ ccall_time_idx++ ] = usec;
-        else
-          ccall_time_idx++;
-        break;
-
       case RUBY_EVENT_CALL:
-        if (call_time_idx < MAX_CALLS)
-          call_times[ call_time_idx++ ] = usec;
+        if (slow_tracer.num_calls < MAX_CALLS)
+          slow_tracer.call_times[ slow_tracer.num_calls++ ] = usec;
         else
-          call_time_idx++;
+          slow_tracer.num_calls++;
         break;
 
       case RUBY_EVENT_C_RETURN:
-        if (ccall_time_idx > 0) {
-          if (ccall_time_idx > MAX_CALLS)
-            ccall_time_idx--;
-          else
-            diff = usec - ccall_times[ --ccall_time_idx ];
-        }
-        break;
-
       case RUBY_EVENT_RETURN:
-        if (call_time_idx > 0) {
-          if (call_time_idx > MAX_CALLS)
-            call_time_idx--;
+        if (slow_tracer.num_calls > 0) {
+          if (slow_tracer.num_calls > MAX_CALLS)
+            slow_tracer.num_calls--;
           else
-            diff = usec - call_times[ --call_time_idx ];
+            diff = usec - slow_tracer.call_times[ --slow_tracer.num_calls ];
         }
         break;
     }
@@ -139,7 +127,7 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
         "%s,-1,%" PRIu64 ",%d,%s,%d,%s",
         event == RUBY_EVENT_RETURN ? "slow" : "cslow",
         diff,
-        event == RUBY_EVENT_RETURN ? call_time_idx : ccall_time_idx,
+        slow_tracer.num_calls,
         rb_id2name(mid),
         singleton,
         klass ? rb_class2name(singleton ? self : klass) : ""
@@ -338,21 +326,19 @@ out:
 static void
 rbtracer_watch()
 {
-  if (!tracer_watching) {
-    call_time_idx = 0;
-    ccall_time_idx = 0;
-
+  if (!slow_tracer.enabled) {
+    slow_tracer.num_calls = 0;
     event_hook_install();
-    tracer_watching = true;
+    slow_tracer.enabled = true;
   }
 }
 
 static void
 rbtracer_unwatch()
 {
-  if (tracer_watching) {
+  if (slow_tracer.enabled) {
     event_hook_remove();
-    tracer_watching = false;
+    slow_tracer.enabled = false;
   }
 }
 
