@@ -2,88 +2,90 @@
 require 'rubygems'
 require 'ffi'
 
-def process_line(line)
-  @tracers ||= {}
-  @nesting ||= 0
-  @last_tracer ||= nil
+module RBTracer
+  def self.process_line(line)
+    @tracers ||= {}
+    @nesting ||= 0
+    @last_tracer ||= nil
 
-  time, event, id, *args = line.strip.split(',')
-  time = time.to_i
-  id = id.to_i
-  tracer = @tracers[id] if id > -1
+    time, event, id, *args = line.strip.split(',')
+    time = time.to_i
+    id = id.to_i
+    tracer = @tracers[id] if id > -1
 
-  case event
-  when 'add'
-    if id == -1
-      puts line
-    else
-      name = args.first
-      @tracers[id] = {
-        :name => name,
-        :times => [],
-        :ctimes => []
-      }
-    end
-
-  when 'remove'
-    if id == -1
-      puts line
-    else
-      @tracers.delete(id)
-    end
-
-  when 'call','ccall'
-    method, is_singleton, klass = *args
-    is_singleton = (is_singleton == '1')
-    bucket = (event == 'call' ? :times : :ctimes)
-
-    tracer[bucket] << time
-
-    puts
-    if @nesting > 0
-      print '   '*@nesting
-    end
-    print klass
-    print is_singleton ? '.' : '#'
-    print method
-
-    @nesting += 1
-    @last_tracer = tracer
-
-  when 'return','creturn'
-    @nesting -= 1 if @nesting > 0
-
-    bucket = (event == 'return' ? :times : :ctimes)
-    if start = tracer[bucket].pop
-      diff = time - start
-
-      if tracer == @last_tracer
-        print ' '
+    case event
+    when 'add'
+      if id == -1
+        puts line
       else
-        puts
+        name = args.first
+        @tracers[id] = {
+          :name => name,
+          :times => [],
+          :ctimes => []
+        }
       end
-      print '<%f>' % (diff/1_000_000.0)
+
+    when 'remove'
+      if id == -1
+        puts line
+      else
+        @tracers.delete(id)
+      end
+
+    when 'call','ccall'
+      method, is_singleton, klass = *args
+      is_singleton = (is_singleton == '1')
+      bucket = (event == 'call' ? :times : :ctimes)
+
+      tracer[bucket] << time
+
+      puts
+      if @nesting > 0
+        print '   '*@nesting
+      end
+      print klass
+      print is_singleton ? '.' : '#'
+      print method
+
+      @nesting += 1
+      @last_tracer = tracer
+
+    when 'return','creturn'
+      @nesting -= 1 if @nesting > 0
+
+      bucket = (event == 'return' ? :times : :ctimes)
+      if start = tracer[bucket].pop
+        diff = time - start
+
+        if tracer == @last_tracer
+          print ' '
+        else
+          puts
+        end
+        print '<%f>' % (diff/1_000_000.0)
+      end
+
+    when 'slow', 'cslow'
+      diff, nesting, method, is_singleton, klass = *args
+      nesting = nesting.to_i
+      diff = diff.to_i
+      is_singleton = (is_singleton == '1')
+
+      if nesting > 0
+        print '   '*nesting
+      end
+      print klass
+      print is_singleton ? '.' : '#'
+      print method
+      print ' '
+      puts "<%f>" % (diff/1_000_000.0)
+      puts if nesting == 0
+
+    else
+      puts "unknown event: #{line}"
+
     end
-
-  when 'slow', 'cslow'
-    diff, nesting, method, is_singleton, klass = *args
-    nesting = nesting.to_i
-    diff = diff.to_i
-    is_singleton = (is_singleton == '1')
-
-    if nesting > 0
-      print '   '*nesting
-    end
-    print klass
-    print is_singleton ? '.' : '#'
-    print method
-    print ' '
-    puts "<%f>" % (diff/1_000_000.0)
-    puts if nesting == 0
-
-  else
-    puts "unknown event: #{line}"
-
   end
 end
 
@@ -165,7 +167,7 @@ else
     end
 
     while true
-      process_line EventMsg.recv_cmd(qi)
+      RBTracer.process_line EventMsg.recv_cmd(qi)
     end
   ensure
     EventMsg.send_cmd(qo, funcs == ['watch'] ? 'unwatch' : 'delall')
