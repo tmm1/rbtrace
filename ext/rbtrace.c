@@ -70,7 +70,7 @@ struct event_msg {
 static int in_event_hook = 0;
 static bool event_hook_installed = false;
 
-#define MAX_CALLS 4096
+#define MAX_CALLS 32768
 static struct {
   bool enabled;
   uint64_t call_times[ MAX_CALLS ];
