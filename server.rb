@@ -1,11 +1,17 @@
 require 'ext/rbtrace'
 
+class String
+  def multiply_vowels(num)
+    gsub(/[aeiou]/){ |m| m*num }
+  end
+end
+
 while true
   proc {
     Dir.chdir("/tmp") do
       Dir.pwd
       Process.pid
-      'hi'.gsub('hi'){ |match| match*2 }
+      'hello'.multiply_vowels(3)
       sleep rand*0.5
     end
   }.call

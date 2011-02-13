@@ -24,6 +24,9 @@
 #ifndef RSTRING_PTR
 #define RSTRING_PTR(str) RSTRING(str)->ptr
 #endif
+#ifndef RSTRING_LEN
+#define RSTRING_LEN(str) RSTRING(str)->len
+#endif
 
 static uint64_t
 timeofday_usec()
@@ -33,6 +36,7 @@ timeofday_usec()
   return (uint64_t)tv.tv_sec*1e6 + (uint64_t)tv.tv_usec;
 }
 
+#define MAX_EXPRS 10
 struct rbtracer_t {
   int id;
 
@@ -40,6 +44,9 @@ struct rbtracer_t {
   VALUE self;
   VALUE klass;
   ID mid;
+
+  int num_exprs;
+  char *exprs[MAX_EXPRS];
 };
 typedef struct rbtracer_t rbtracer_t;
 
@@ -191,6 +198,35 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
         singleton,
         klass ? rb_class2name(singleton ? self : klass) : ""
       );
+
+      if (tracer->num_exprs) {
+        for (i=0; i<tracer->num_exprs; i++) {
+          char *expr = tracer->exprs[i];
+          size_t len = strlen(expr);
+          VALUE val = Qnil;
+
+          if (len == 4 && strcmp("self", expr) == 0) {
+            val = rb_inspect(self);
+
+          } else if (event == RUBY_EVENT_CALL) {
+            char code[len+50];
+            snprintf(code, len+50, "(begin; %s; rescue Exception => e; e; end).inspect", expr);
+
+            val = rb_eval_string(code);
+          }
+
+          if (RTEST(val) && TYPE(val) == T_STRING) {
+            char *result = RSTRING_PTR(val);
+            SEND_EVENT(
+              "%s,%d,%d,%s",
+              "exprval",
+              tracer->id,
+              i,
+              result
+            );
+          }
+        }
+      }
       break;
 
     case RUBY_EVENT_C_RETURN:
@@ -256,8 +292,17 @@ rbtracer_remove(char *query, int id)
   if (tracer->query) {
     tracer_id = tracer->id;
     tracer->mid = 0;
+
     free(tracer->query);
     tracer->query = NULL;
+
+    if (tracer->num_exprs) {
+      for(i=0; i<tracer->num_exprs; i++) {
+        free(tracer->exprs[i]);
+        tracer->exprs[i] = NULL;
+      }
+      tracer->num_exprs = 0;
+    }
 
     num_tracers--;
     if (num_tracers == 0)
@@ -331,6 +376,7 @@ rbtracer_add(char *query)
   tracer->klass = klass;
   tracer->mid = mid;
   tracer->query = strdup(query);
+  tracer->num_exprs = 0;
 
   if (num_tracers == 0)
     event_hook_install();
@@ -344,6 +390,34 @@ out:
     query
   );
   return tracer_id;
+}
+
+static void
+rbtracer_add_expr(int id, char *expr)
+{
+  int expr_id = -1;
+  int tracer_id = -1;
+  rbtracer_t *tracer = NULL;
+
+  if (id >= MAX_TRACERS) goto out;
+  tracer = &tracers[id];
+
+  if (tracer->query) {
+    tracer_id = tracer->id;
+
+    if (tracer->num_exprs < MAX_EXPRS) {
+      expr_id = tracer->num_exprs++;
+      tracer->exprs[expr_id] = strdup(expr);
+    }
+  }
+
+out:
+  SEND_EVENT(
+    "newexpr,%d,%d,%s",
+    tracer_id,
+    expr_id,
+    expr
+  );
 }
 
 static void
@@ -414,6 +488,7 @@ cleanup_ruby(VALUE data)
 static void
 sigurg(int signal)
 {
+  static int last_tracer_id = -1; // hax
   if (mqi_id == -1) return;
 
   struct event_msg msg;
@@ -436,7 +511,7 @@ sigurg(int signal)
 
       if (0 == strncmp("add,", msg.buf, 4)) {
         query = msg.buf + 4;
-        rbtracer_add(query);
+        last_tracer_id = rbtracer_add(query);
 
       } else if (0 == strncmp("del,", msg.buf, 4)) {
         query = msg.buf + 4;
@@ -444,6 +519,10 @@ sigurg(int signal)
 
       } else if (0 == strncmp("delall", msg.buf, 6)) {
         rbtracer_remove_all();
+
+      } else if (0 == strncmp("addexpr,", msg.buf, 8)) {
+        query = msg.buf + 8;
+        rbtracer_add_expr(last_tracer_id, query);
 
       } else if (0 == strncmp("watch,", msg.buf, 6)) {
         int msec = 250;

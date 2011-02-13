@@ -22,7 +22,9 @@ module RBTracer
         @tracers[id] = {
           :name => name,
           :times => [],
-          :names => []
+          :names => [],
+          :exprs => {},
+          :arglist => false
         }
       end
 
@@ -33,6 +35,29 @@ module RBTracer
         @tracers.delete(id)
       end
 
+    when 'newexpr'
+      expr_id, expr = *args
+      expr_id = expr_id.to_i
+
+      if expr_id > -1 and tracer
+        tracer[:exprs][expr_id] = expr
+      end
+
+    when 'exprval'
+      expr_id, val = *args
+      expr_id = expr_id.to_i
+      expr = tracer[:exprs][expr_id]
+
+      if tracer[:arglist]
+        print ', '
+      else
+        print '('
+      end
+
+      print "#{expr}="
+      print val
+      tracer[:arglist] = true
+
     when 'call','ccall'
       method, is_singleton, klass = *args
       is_singleton = (is_singleton == '1')
@@ -42,6 +67,7 @@ module RBTracer
       tracer[:times] << time
       tracer[:names] << name
 
+      print ')' if @last_tracer and @last_tracer[:arglist]
       puts
       print ' '*@nesting if @nesting > 0
       print name
@@ -56,6 +82,8 @@ module RBTracer
         name = tracer[:names].pop
         diff = time - start
 
+        print ')' if @last_tracer and @last_tracer[:arglist]
+
         unless tracer == @last_tracer
           puts
           print ' '*@nesting if @nesting > 0
@@ -64,6 +92,8 @@ module RBTracer
         print ' <%f>' % (diff/1_000_000.0)
         puts if @nesting == 0 and tracer != @last_tracer
       end
+
+      tracer[:arglist] = false
 
     when 'slow', 'cslow'
       diff, nesting, method, is_singleton, klass = *args
@@ -171,8 +201,21 @@ else
       Process.kill 'URG', pid
     else
       funcs.each do |func|
+        func.strip!
+        if func =~ /^(.+)\((.+?)\)$/
+          func, args = $1, $2
+          args = args.split(',').map{ |a| a.strip }
+        end
+
         EventMsg.send_cmd(qo, "add,#{func}")
         Process.kill 'URG', pid
+
+        if args and args.any?
+          args.each do |arg|
+            EventMsg.send_cmd(qo, "addexpr,#{arg}")
+            Process.kill 'URG', pid
+          end
+        end
       end
     end
 

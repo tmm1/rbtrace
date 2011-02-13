@@ -9,12 +9,18 @@ like strace, but for ruby code
     % cat server.rb
     require 'ext/rbtrace'
 
+    class String
+      def multiply_vowels(num)
+        gsub(/[aeiou]/){ |m| m*num }
+      end
+    end
+
     while true
       proc {
         Dir.chdir("/tmp") do
           Dir.pwd
           Process.pid
-          'hi'.gsub('hi'){ |match| match*2 }
+          'hello'.multiply_vowels(3)
           sleep rand*0.5
         end
       }.call
@@ -49,6 +55,7 @@ like strace, but for ruby code
        Process.pid <0.000016>
        String#gsub
           String#* <0.000020>
+          String#* <0.000020>
        String#gsub <0.000072>
        Kernel#sleep <0.369630>
     Dir.chdir <0.370220>
@@ -58,8 +65,20 @@ like strace, but for ruby code
        Process.pid <0.000017>
        String#gsub
           String#* <0.000020>
+          String#* <0.000020>
        String#gsub <0.000071>
     ^C./bin/rbtrace:113: Interrupt
+
+### get values of variables and other expressions
+
+    % ./bin/rbtrace 95532 "String#gsub(self)" "String#*(self)" "String#multiply_vowels(self, num)"
+
+    String#multiply_vowels(self="hello", num=3)
+       String#gsub(self="hello")
+          String#*(self="e") <0.000021>
+          String#*(self="o") <0.000019>
+       String#gsub <0.000097>
+    String#multiply_vowels <0.000203>
 
 ### watch for method calls slower than 250ms
 
@@ -77,4 +96,3 @@ like strace, but for ruby code
     Proc#call <0.399797>
 
     ^C./bin/rbtrace:113: Interrupt
-
