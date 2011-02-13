@@ -15,8 +15,15 @@
 #include <unistd.h>
 
 #include <ruby.h>
+
+#ifndef RUBY_VM
 #include <node.h>
 #include <intern.h>
+#endif
+
+#ifndef RSTRING_PTR
+#define RSTRING_PTR(str) RSTRING(str)->ptr
+#endif
 
 static uint64_t
 timeofday_usec()
@@ -88,7 +95,11 @@ static struct {
 };
 
 static void
+#ifdef RUBY_VM
+event_hook(rb_event_flag_t event, VALUE data, VALUE self, ID mid, VALUE klass)
+#else
 event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
+#endif
 {
   // do not re-enter this function
   // after this, must `goto out` instead of `return`
@@ -204,6 +215,9 @@ event_hook_install()
       event_hook,
       RUBY_EVENT_CALL   | RUBY_EVENT_C_CALL |
       RUBY_EVENT_RETURN | RUBY_EVENT_C_RETURN
+#ifdef RB_EVENT_HOOKS_HAVE_CALLBACK_DATA
+      , 0
+#endif
     );
     event_hook_installed = true;
   }
@@ -359,7 +373,7 @@ rbtrace(VALUE self, VALUE query)
 {
   Check_Type(query, T_STRING);
 
-  char *str = RSTRING(query)->ptr;
+  char *str = RSTRING_PTR(query);
   int tracer_id = -1;
 
   tracer_id = rbtracer_add(str);
@@ -371,7 +385,7 @@ untrace(VALUE self, VALUE query)
 {
   Check_Type(query, T_STRING);
 
-  char *str = RSTRING(query)->ptr;
+  char *str = RSTRING_PTR(query);
   int tracer_id = -1;
 
   tracer_id = rbtracer_remove(str, -1);
@@ -404,7 +418,7 @@ sigurg(int signal)
 
   struct event_msg msg;
   char *query = NULL;
-  int len = 0;
+  size_t len = 0;
   int n = 0;
 
   while (true) {
