@@ -36,13 +36,14 @@ module RBTracer
     when 'call','ccall'
       method, is_singleton, klass = *args
       is_singleton = (is_singleton == '1')
-      name = "#{klass}#{ is_singleton ? '.' : '#' }#{method}"
+      name = klass ? "#{klass}#{ is_singleton ? '.' : '#' }" : ''
+      name += method
 
       tracer[:times] << time
       tracer[:names] << name
 
       puts
-      print '   '*@nesting if @nesting > 0
+      print ' '*@nesting if @nesting > 0
       print name
 
       @nesting += 1
@@ -57,7 +58,7 @@ module RBTracer
 
         unless tracer == @last_tracer
           puts
-          print '   '*@nesting if @nesting > 0
+          print ' '*@nesting if @nesting > 0
           print name
         end
         print ' <%f>' % (diff/1_000_000.0)
@@ -68,14 +69,13 @@ module RBTracer
       diff, nesting, method, is_singleton, klass = *args
       nesting = nesting.to_i
       diff = diff.to_i
-      is_singleton = (is_singleton == '1')
 
-      if nesting > 0
-        print '   '*nesting
-      end
-      print klass
-      print is_singleton ? '.' : '#'
-      print method
+      is_singleton = (is_singleton == '1')
+      name = klass ? "#{klass}#{ is_singleton ? '.' : '#' }" : ''
+      name += method
+
+      print ' '*nesting if nesting > 0
+      print name
       print ' '
       puts "<%f>" % (diff/1_000_000.0)
       puts if nesting == 0
