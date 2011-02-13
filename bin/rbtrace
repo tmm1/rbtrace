@@ -84,37 +84,49 @@ module RBTracer
       puts "unknown event: #{line}"
 
     end
+  rescue => e
+    puts "error on: #{line}"
+    raise e
   end
 end
 
 class EventMsg < FFI::Struct
+  BUF_SIZE = 120
+  IPC_NOWAIT = 004000
+
   layout :mtype, :long,
-         :buf, [:char, 56]
+         :buf, [:char, BUF_SIZE]
 
   def self.send_cmd(q, str)
     msg = EventMsg.new
     msg[:mtype] = 1
     msg[:buf].to_ptr.put_string(0, str)
 
-    ret = MsgQ.msgsnd(q, msg, 56, 0)
+    ret = MsgQ.msgsnd(q, msg, BUF_SIZE, 0)
     FFI::LastError.raise if ret == -1
   end
 
-  def self.recv_cmd(q)
+  def self.recv_cmd(q, block=true)
     msg = EventMsg.new
-    ret = MsgQ.msgrcv(q, msg, 56, 0, 0)
-    FFI::LastError.raise if ret == -1
+    ret = MsgQ.msgrcv(q, msg, BUF_SIZE, 0, block ? 0 : IPC_NOWAIT)
+    if ret == -1
+      if !block and [Errno::EAGAIN, Errno::ENOMSG].include?(FFI::LastError.exception)
+        return nil
+      end
+
+      FFI::LastError.raise
+    end
 
     msg[:buf].to_ptr.read_string
   end
 end
 
 module FFI::LastError
+  def self.exception
+    Errno::constants.map(&Errno.method(:const_get)).find{ |c| c.const_get(:Errno) == error }
+  end
   def self.raise(msg=nil)
-    errno = error
-    exception = Errno::constants.map(&Errno.method(:const_get)).find{ |c| c.const_get(:Errno) == errno }
-
-    raise exception, msg
+    Kernel.raise exception, msg
   end
 end
 
@@ -165,7 +177,19 @@ else
     end
 
     while true
-      RBTracer.process_line EventMsg.recv_cmd(qi)
+      # block until a message arrives
+      lines = [EventMsg.recv_cmd(qi)]
+
+      # check to see if there are more messages and pull them off
+      # so the queue doesn't fill up in kernel land
+      25.times do
+        break unless line = EventMsg.recv_cmd(qi, false)
+        lines << line
+      end
+
+      lines.each do |line|
+        RBTracer.process_line(line)
+      end
     end
   ensure
     EventMsg.send_cmd(qo, funcs.first == 'watch' ? 'unwatch' : 'delall')

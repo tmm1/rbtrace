@@ -43,9 +43,10 @@ static unsigned int num_tracers = 0;
 key_t mqi_key, mqo_key;
 int mqi_id = -1, mqo_id = -1;
 
+#define BUF_SIZE 120
 struct event_msg {
   long mtype;
-  char buf[56];
+  char buf[BUF_SIZE];
 };
 
 #define SEND_EVENT(format, ...) do {\
@@ -62,8 +63,12 @@ struct event_msg {
     \
     for (n=0; n<10 && ret==-1; n++)\
       ret = msgsnd(mqo_id, &msg, sizeof(msg)-sizeof(long), IPC_NOWAIT);\
-    if (ret == -1)\
+    if (ret == -1) {\
       fprintf(stderr, "msgsnd(): %s\n", strerror(errno));\
+      struct msqid_ds stat;\
+      msgctl(mqo_id, IPC_STAT, &stat);\
+      fprintf(stderr, "cbytes: %lu, qbytes: %lu, qnum: %lu\n", stat.msg_cbytes, stat.msg_qbytes, stat.msg_qnum);\
+    }\
   }\
 } while (0)
 
@@ -463,9 +468,21 @@ Init_rbtrace()
   if (mqi_id == -1)
     rb_sys_fail("msgget");
 
-  /* struct msqid_ds stat;*/
-  /* msgctl(mqo_id, IPC_STAT, &stat);*/
-  /* printf("cbytes: %lu, qbytes: %lu, qnum: %lu\n", stat.msg_cbytes, stat.msg_qbytes, stat.msg_qnum);*/
+  /*
+  struct msqid_ds stat;
+  int ret;
+
+  msgctl(mqo_id, IPC_STAT, &stat);
+  printf("cbytes: %lu, qbytes: %lu, qnum: %lu\n", stat.msg_cbytes, stat.msg_qbytes, stat.msg_qnum);
+
+  stat.msg_qbytes += 10;
+  ret = msgctl(mqo_id, IPC_SET, &stat);
+  printf("cbytes: %lu, qbytes: %lu, qnum: %lu\n", stat.msg_cbytes, stat.msg_qbytes, stat.msg_qnum);
+  printf("ret: %d, errno: %d\n", ret, errno);
+
+  msgctl(mqo_id, IPC_STAT, &stat);
+  printf("cbytes: %lu, qbytes: %lu, qnum: %lu\n", stat.msg_cbytes, stat.msg_qbytes, stat.msg_qnum);
+  */
 
   rb_define_method(rb_cObject, "rbtrace", rbtrace, 1);
   rb_define_method(rb_cObject, "untrace", untrace, 1);
