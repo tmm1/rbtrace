@@ -191,6 +191,13 @@ if (pids = `ps ax -o pid`.split("\n").map{ |p| p.strip.to_i }).any?
   end
 end
 
+if File.exists?(msgmnb = "/proc/sys/kernel/msgmnb")
+  max = File.read(msgmnb).to_i
+  if max < 512*1024
+    STDERR.puts "** run `sudo sysctl kernel.msgmnb=#{512*1024}` to prevent losing events"
+  end
+end
+
 raise 'invalid pid' unless ARGV[0]
 
 begin
