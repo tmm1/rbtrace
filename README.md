@@ -1,6 +1,9 @@
-# rbtrace
+# rbtrace: like strace, but for ruby code
 
-like strace, but for ruby code
+rbtrace shows you method calls happening inside another ruby process in real
+time.
+
+rbtrace works on ruby 1.8 and 1.9, running on linux or mac osx.
 
 ## usage
 
@@ -113,3 +116,15 @@ like strace, but for ruby code
     Proc#call <0.399797>
 
     ^C./bin/rbtrace:113: Interrupt
+
+## todo
+
+* add some simple tests
+* switch ipc to msgpack instead of csv
+* use proper option parser to bin/rbtrace
+  * add -t and -tt for start timestamps
+  * add -o to write trace output to a file
+  * add -p to provide pid
+  * add -c to read trace definitions from conf file
+* investigate mach_msg on osx since msgget(2) has hard kernel limits
+
