@@ -89,9 +89,9 @@ rbtrace works on ruby 1.8 and 1.9, running on linux or mac osx.
 
 ### get values of variables and other expressions
 
-    % ./bin/rbtrace $! "String#gsub(self)" "String#*(self)" "String#multiply_vowels(self, self.length, num, caller[0])"
+    % ./bin/rbtrace $! "String#gsub(self)" "String#*(self)" "String#multiply_vowels(self, self.length, num)"
 
-    String#multiply_vowels(self="hello", self.length=5, num=3, caller[0]="server.rb:11:in `chdir'")
+    String#multiply_vowels(self="hello", self.length=5, num=3)
        String#gsub(self="hello")
           String#*(self="e") <0.000021>
           String#*(self="o") <0.000019>
