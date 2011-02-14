@@ -119,13 +119,18 @@ rbtrace works on ruby 1.8 and 1.9, running on linux or mac osx.
 
 ## todo
 
-* add some simple tests
+* create message queues lazily (on first signal/after fork)
+* remove ruby api
 * switch ipc to msgpack instead of csv
+* add some simple tests
+* add triggers to start tracing slow methods inside another method
 * use proper option parser in bin/rbtrace
   * add -t and -tt for start timestamps
   * add -T to toggle duration timestamps
   * add -o to write trace output to a file
   * add -p to provide pid
   * add -c to read trace definitions from conf file
+* use shared memory region for symbol table to avoid lookup on every event
+* use another shm for class name lookup, and wipe on every GC
 * investigate mach_msg on osx since msgget(2) has hard kernel limits
 
