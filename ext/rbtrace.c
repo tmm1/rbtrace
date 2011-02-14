@@ -57,7 +57,10 @@ static unsigned int num_tracers = 0;
 key_t mqi_key, mqo_key;
 int mqi_id = -1, mqo_id = -1;
 
+#ifndef BUF_SIZE
 #define BUF_SIZE 120
+#endif
+
 struct event_msg {
   long mtype;
   char buf[BUF_SIZE];
