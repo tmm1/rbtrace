@@ -86,9 +86,9 @@ like strace, but for ruby code
 
 ### get values of variables and other expressions
 
-    % ./bin/rbtrace $! "String#gsub(self)" "String#*(self)" "String#multiply_vowels(self, num)"
+    % ./bin/rbtrace $! "String#gsub(self)" "String#*(self)" "String#multiply_vowels(self, num, length)"
 
-    String#multiply_vowels(self="hello", num=3)
+    String#multiply_vowels(self="hello", num=3, length=5)
        String#gsub(self="hello")
           String#*(self="e") <0.000021>
           String#*(self="o") <0.000019>

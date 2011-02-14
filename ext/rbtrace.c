@@ -203,7 +203,7 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
         for (i=0; i<tracer->num_exprs; i++) {
           char *expr = tracer->exprs[i];
           size_t len = strlen(expr);
-          VALUE val = Qnil;
+          VALUE str = Qnil, val = Qnil;
 
           if (len == 4 && strcmp("self", expr) == 0) {
             val = rb_inspect(self);
@@ -212,7 +212,8 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
             char code[len+50];
             snprintf(code, len+50, "(begin; %s; rescue Exception => e; e; end).inspect", expr);
 
-            val = rb_eval_string(code);
+            str = rb_str_new2(code);
+            val = rb_obj_instance_eval(1, &str, self);
           }
 
           if (RTEST(val) && TYPE(val) == T_STRING) {
