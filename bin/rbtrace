@@ -175,6 +175,22 @@ module MsgQ
   attach_function :msgsnd, [:int, EventMsg.ptr, :size_t, :int], :int
 end
 
+if (pids = `ps ax -o pid`.split("\n").map{ |p| p.strip.to_i }).any?
+  ipcs = `ipcs -q`.split("\n").grep(/^q/).map{ |line| line.strip.split[2] }
+  ipcs.each do |ipci|
+    next if ipci.match(/^0xf/)
+
+    qi = ipci.to_i(16)
+    qo = 0xffffffff - qi + 1
+    ipco = "0x#{qo.to_s(16)}"
+
+    if ipcs.include?(ipco) and !pids.include?(qi)
+      STDERR.puts "** removing stale message queue pair: #{ipci}/#{ipco}"
+      system("ipcrm -Q #{ipci} -Q #{ipco}")
+    end
+  end
+end
+
 raise 'invalid pid' unless ARGV[0]
 
 begin
