@@ -121,8 +121,9 @@ rbtrace works on ruby 1.8 and 1.9, running on linux or mac osx.
 
 * add some simple tests
 * switch ipc to msgpack instead of csv
-* use proper option parser to bin/rbtrace
+* use proper option parser in bin/rbtrace
   * add -t and -tt for start timestamps
+  * add -T to toggle duration timestamps
   * add -o to write trace output to a file
   * add -p to provide pid
   * add -c to read trace definitions from conf file
