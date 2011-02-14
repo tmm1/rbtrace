@@ -24,6 +24,7 @@ module RBTracer
           :times => [],
           :names => [],
           :exprs => {},
+          :last => false,
           :arglist => false
         }
       end
@@ -67,13 +68,17 @@ module RBTracer
       tracer[:times] << time
       tracer[:names] << name
 
-      print ')' if @last_tracer and @last_tracer[:arglist]
+      if @last_tracer and @last_tracer[:arglist]
+        print ')'
+        @last_tracer[:arglist] = false
+      end
       puts
       print ' '*@nesting if @nesting > 0
       print name
 
       @nesting += 1
       @last_tracer = tracer
+      tracer[:last] = name
 
     when 'return','creturn'
       @nesting -= 1 if @nesting > 0
@@ -81,16 +86,17 @@ module RBTracer
       if start = tracer[:times].pop
         name = tracer[:names].pop
         diff = time - start
+        @last_tracer[:arglist] = false if @last_tracer and @last_tracer[:last] != name
 
         print ')' if @last_tracer and @last_tracer[:arglist]
 
-        unless tracer == @last_tracer
+        unless tracer == @last_tracer and @last_tracer[:last] == name
           puts
           print ' '*@nesting if @nesting > 0
           print name
         end
         print ' <%f>' % (diff/1_000_000.0)
-        puts if @nesting == 0 and tracer != @last_tracer
+        puts if @nesting == 0 and (tracer != @last_tracer || @last_tracer[:last] != name)
       end
 
       tracer[:arglist] = false

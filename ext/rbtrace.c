@@ -174,7 +174,7 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
     if (tracers[i].query) {
       n++;
 
-      if (tracers[i].mid == mid) {
+      if (!tracers[i].mid || tracers[i].mid == mid) {
         if (!tracers[i].klass || tracers[i].klass == klass) {
           if (!tracers[i].self || tracers[i].self == self) {
             tracer = &tracers[i];
@@ -347,27 +347,34 @@ rbtracer_add(char *query)
   }
   if (!tracer) goto out;
 
-  char *index;
+  char *idx, *method;
   VALUE klass = 0, self = 0;
-  ID mid;
+  ID mid = 0;
 
-  if (NULL != (index = rindex(query, '.'))) {
-    *index = 0;
+  if (NULL != (idx = rindex(query, '.'))) {
+    *idx = 0;
     self = rb_eval_string_protect(query, 0);
-    *index = '.';
+    *idx = '.';
 
-    mid = rb_intern(index+1);
-  } else if (NULL != (index = rindex(query, '#'))) {
-    *index = 0;
+    method = idx+1;
+  } else if (NULL != (idx = rindex(query, '#'))) {
+    *idx = 0;
     klass = rb_eval_string_protect(query, 0);
-    *index = '#';
+    *idx = '#';
 
-    mid = rb_intern(index+1);
+    method = idx+1;
   } else {
-    mid = rb_intern(query);
+    method = query;
   }
 
-  if (!mid) goto out;
+  if (method && *method) {
+    mid = rb_intern(method);
+    if (!mid) goto out;
+  } else if (klass || self) {
+    mid = 0;
+  } else {
+    goto out;
+  }
 
   memset(tracer, 0, sizeof(*tracer));
 

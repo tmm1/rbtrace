@@ -33,7 +33,7 @@ like strace, but for ruby code
 
 ### trace a function using the process's pid
 
-    % ./bin/rbtrace 95532 sleep
+    % ./bin/rbtrace $! sleep
 
     Kernel#sleep <0.329042>
     Kernel#sleep <0.035732>
@@ -48,7 +48,7 @@ like strace, but for ruby code
 
 ### trace multiple functions
 
-    % ./bin/rbtrace 95532 sleep Dir.chdir Dir.pwd Process.pid "String#gsub" "String#*"
+    % ./bin/rbtrace $! sleep Dir.chdir Dir.pwd Process.pid "String#gsub" "String#*"
 
     Dir.chdir
        Dir.pwd <0.000094>
@@ -69,9 +69,24 @@ like strace, but for ruby code
        String#gsub <0.000071>
     ^C./bin/rbtrace:113: Interrupt
 
+### trace all functions in a class/module
+
+    % ./bin/rbtrace $! "Kernel#"
+
+    Kernel#proc <0.000071>
+    Kernel#rand <0.000029>
+    Kernel#sleep <0.331857>
+    Kernel#proc <0.000019>
+    Kernel#rand <0.000010>
+    Kernel#sleep <0.296361>
+    Kernel#proc <0.000021>
+    Kernel#rand <0.000012>
+    Kernel#sleep <0.281067>
+    ^C./bin/rbtrace:113: Interrupt
+
 ### get values of variables and other expressions
 
-    % ./bin/rbtrace 95532 "String#gsub(self)" "String#*(self)" "String#multiply_vowels(self, num)"
+    % ./bin/rbtrace $! "String#gsub(self)" "String#*(self)" "String#multiply_vowels(self, num)"
 
     String#multiply_vowels(self="hello", num=3)
        String#gsub(self="hello")
@@ -80,9 +95,11 @@ like strace, but for ruby code
        String#gsub <0.000097>
     String#multiply_vowels <0.000203>
 
+    ^C./bin/rbtrace:113: Interrupt
+
 ### watch for method calls slower than 250ms
 
-    % ./bin/rbtrace 95532 watch 250
+    % ./bin/rbtrace $! watch 250
           Kernel#sleep <0.402916>
        Dir.chdir <0.403122>
     Proc#call <0.403152>
