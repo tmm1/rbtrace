@@ -221,6 +221,9 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
             snprintf(buffer, len+50, "%s:%d", rb_sourcefile(), rb_sourceline());
             result = buffer;
 
+          } else if (len > 1 && expr[0] == '@') {
+            val = rb_inspect(rb_ivar_get(self, rb_intern(expr)));
+
           } else if (event == RUBY_EVENT_CALL) {
             snprintf(buffer, len+50, "(begin; %s; rescue Exception => e; e; end).inspect", expr);
 

@@ -2,6 +2,7 @@ require 'ext/rbtrace'
 
 class String
   def multiply_vowels(num)
+    @test = 123
     gsub(/[aeiou]/){ |m| m*num }
   end
 end
