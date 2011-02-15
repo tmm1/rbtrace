@@ -218,11 +218,14 @@ if ARGV.size > 2
   funcs += ARGV[2..-1]
 end
 
+Process.kill 'URG', pid
+sleep 0.25 # wait for process to create msgqs
+
 qi = MsgQ.msgget(pid, 0666)
 qo = MsgQ.msgget(-pid, 0666)
 
 if qi == -1 || qo == -1
-  raise 'invalid pid'
+  raise 'pid is not listening for messages'
 else
   begin
     if funcs.first == 'watch'

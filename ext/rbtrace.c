@@ -54,8 +54,8 @@ typedef struct rbtracer_t rbtracer_t;
 static rbtracer_t tracers[MAX_TRACERS];
 static unsigned int num_tracers = 0;
 
-key_t mqi_key, mqo_key;
-int mqi_id = -1, mqo_id = -1;
+static key_t mqi_key = 0, mqo_key = 0;
+static int mqi_id = -1, mqo_id = -1;
 
 #ifndef BUF_SIZE
 #define BUF_SIZE 120
@@ -71,7 +71,7 @@ struct event_msg {
   if (false) {\
     fprintf(stderr, "%" PRIu64 "," format, usec, __VA_ARGS__);\
     fprintf(stderr, "\n");\
-  } else {\
+  } else if (mqo_id != -1) {\
     struct event_msg msg;\
     int ret = -1, n = 0;\
     \
@@ -454,28 +454,73 @@ rbtracer_unwatch()
 }
 
 static void
-cleanup()
+msgq_teardown()
 {
   if (mqo_id != -1) {
     msgctl(mqo_id, IPC_RMID, NULL);
     mqo_id = -1;
+    mqo_key = 0;
   }
   if (mqi_id != -1) {
     msgctl(mqi_id, IPC_RMID, NULL);
     mqi_id = -1;
+    mqi_key = 0;
   }
 }
 
 static void
-cleanup_ruby(VALUE data)
+ruby_teardown(VALUE data)
 {
-  cleanup();
+  msgq_teardown();
+}
+
+static void
+msgq_setup()
+{
+  pid_t pid = getpid();
+
+  if (mqo_key != (key_t)pid ||
+      mqi_key != (key_t)-pid) {
+    msgq_teardown();
+  } else {
+    return;
+  }
+
+  mqo_key = (key_t) pid;
+  mqo_id  = msgget(mqo_key, 0666 | IPC_CREAT);
+
+  if (mqo_id == -1)
+    fprintf(stderr, "msgget() failed to create msgq\n");
+
+
+  mqi_key = (key_t) -pid;
+  mqi_id  = msgget(mqi_key, 0666 | IPC_CREAT);
+
+  if (mqi_id == -1)
+    fprintf(stderr, "msgget() failed to create msgq\n");
+
+  /*
+  struct msqid_ds stat;
+  int ret;
+
+  msgctl(mqo_id, IPC_STAT, &stat);
+  printf("cbytes: %lu, qbytes: %lu, qnum: %lu\n", stat.msg_cbytes, stat.msg_qbytes, stat.msg_qnum);
+
+  stat.msg_qbytes += 10;
+  ret = msgctl(mqo_id, IPC_SET, &stat);
+  printf("cbytes: %lu, qbytes: %lu, qnum: %lu\n", stat.msg_cbytes, stat.msg_qbytes, stat.msg_qnum);
+  printf("ret: %d, errno: %d\n", ret, errno);
+
+  msgctl(mqo_id, IPC_STAT, &stat);
+  printf("cbytes: %lu, qbytes: %lu, qnum: %lu\n", stat.msg_cbytes, stat.msg_qbytes, stat.msg_qnum);
+  */
 }
 
 static void
 sigurg(int signal)
 {
   static int last_tracer_id = -1; // hax
+  msgq_setup();
   if (mqi_id == -1) return;
 
   struct event_msg msg;
@@ -531,36 +576,13 @@ sigurg(int signal)
 void
 Init_rbtrace()
 {
-  atexit(cleanup);
-  rb_set_end_proc(cleanup_ruby, 0);
-
-  signal(SIGURG, sigurg);
-
+  // zero out tracer
   memset(&tracers, 0, sizeof(tracers));
 
-  mqo_key = (key_t) getpid();
-  mqo_id  = msgget(mqo_key, 0666 | IPC_CREAT);
-  if (mqo_id == -1)
-    rb_sys_fail("msgget");
+  // catch signal telling us to read from the msgq
+  signal(SIGURG, sigurg);
 
-  mqi_key = (key_t) -getpid();
-  mqi_id  = msgget(mqi_key, 0666 | IPC_CREAT);
-  if (mqi_id == -1)
-    rb_sys_fail("msgget");
-
-  /*
-  struct msqid_ds stat;
-  int ret;
-
-  msgctl(mqo_id, IPC_STAT, &stat);
-  printf("cbytes: %lu, qbytes: %lu, qnum: %lu\n", stat.msg_cbytes, stat.msg_qbytes, stat.msg_qnum);
-
-  stat.msg_qbytes += 10;
-  ret = msgctl(mqo_id, IPC_SET, &stat);
-  printf("cbytes: %lu, qbytes: %lu, qnum: %lu\n", stat.msg_cbytes, stat.msg_qbytes, stat.msg_qnum);
-  printf("ret: %d, errno: %d\n", ret, errno);
-
-  msgctl(mqo_id, IPC_STAT, &stat);
-  printf("cbytes: %lu, qbytes: %lu, qnum: %lu\n", stat.msg_cbytes, stat.msg_qbytes, stat.msg_qnum);
-  */
+  // cleanup the msgq on exit
+  atexit(msgq_teardown);
+  rb_set_end_proc(ruby_teardown, 0);
 }
