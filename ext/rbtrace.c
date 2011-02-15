@@ -53,13 +53,6 @@ struct rbtracer_t {
 };
 typedef struct rbtracer_t rbtracer_t;
 
-#define MAX_TRACERS 100
-static rbtracer_t tracers[MAX_TRACERS];
-static unsigned int num_tracers = 0;
-
-static key_t mqi_key = 0, mqo_key = 0;
-static int mqi_id = -1, mqo_id = -1;
-
 #ifndef BUF_SIZE
 #define BUF_SIZE 120
 #endif
@@ -69,12 +62,46 @@ struct event_msg {
   char buf[BUF_SIZE];
 };
 
+#define MAX_CALLS 32768
+#define MAX_TRACERS 100
+
+static struct {
+  bool installed;
+
+  bool slow;
+  uint64_t call_times[MAX_CALLS];
+  int num_calls;
+  uint32_t threshold;
+
+  unsigned int num;
+  rbtracer_t list[MAX_TRACERS];
+
+  key_t mqo_key;
+  key_t mqi_key;
+  int mqo_id;
+  int mqi_id;
+}
+rbtracer = {
+  .installed = false,
+
+  .slow = false,
+  .num_calls = 0,
+  .threshold = 250,
+
+  .num = 0,
+
+  .mqo_key = 0,
+  .mqi_key = 0,
+  .mqo_id = -1,
+  .mqi_id = -1
+};
+
 #define SEND_EVENT(format, ...) do {\
   uint64_t usec = timeofday_usec();\
   if (false) {\
     fprintf(stderr, "%" PRIu64 "," format, usec, __VA_ARGS__);\
     fprintf(stderr, "\n");\
-  } else if (mqo_id != -1) {\
+  } else if (rbtracer.mqo_id != -1) {\
     struct event_msg msg;\
     int ret = -1, n = 0;\
     \
@@ -82,30 +109,15 @@ struct event_msg {
     snprintf(msg.buf, sizeof(msg.buf), "%" PRIu64 "," format, usec, __VA_ARGS__);\
     \
     for (n=0; n<10 && ret==-1; n++)\
-      ret = msgsnd(mqo_id, &msg, sizeof(msg)-sizeof(long), IPC_NOWAIT);\
+      ret = msgsnd(rbtracer.mqo_id, &msg, sizeof(msg)-sizeof(long), IPC_NOWAIT);\
     if (ret == -1) {\
       fprintf(stderr, "msgsnd(): %s\n", strerror(errno));\
       struct msqid_ds stat;\
-      msgctl(mqo_id, IPC_STAT, &stat);\
+      msgctl(rbtracer.mqo_id, IPC_STAT, &stat);\
       fprintf(stderr, "cbytes: %lu, qbytes: %lu, qnum: %lu\n", stat.msg_cbytes, stat.msg_qbytes, stat.msg_qnum);\
     }\
   }\
 } while (0)
-
-static int in_event_hook = 0;
-static bool event_hook_installed = false;
-
-#define MAX_CALLS 32768
-static struct {
-  bool enabled;
-  uint64_t call_times[ MAX_CALLS ];
-  int num_calls;
-  uint32_t threshold;
-} slow_tracer = {
-  .enabled = false,
-  .num_calls = 0,
-  .threshold = 250
-};
 
 static void
 #ifdef RUBY_VM
@@ -114,6 +126,8 @@ event_hook(rb_event_flag_t event, VALUE data, VALUE self, ID mid, VALUE klass)
 event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
 #endif
 {
+  static int in_event_hook = 0;
+
   // do not re-enter this function
   // after this, must `goto out` instead of `return`
   if (in_event_hook) return;
@@ -132,35 +146,35 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
   }
 
   // are we watching for any slow methods?
-  if (slow_tracer.enabled) {
+  if (rbtracer.slow) {
     uint64_t usec = timeofday_usec(), diff = 0;
 
     switch (event) {
       case RUBY_EVENT_C_CALL:
       case RUBY_EVENT_CALL:
-        if (slow_tracer.num_calls < MAX_CALLS)
-          slow_tracer.call_times[ slow_tracer.num_calls ] = usec;
+        if (rbtracer.num_calls < MAX_CALLS)
+          rbtracer.call_times[ rbtracer.num_calls ] = usec;
 
-        slow_tracer.num_calls++;
+        rbtracer.num_calls++;
         break;
 
       case RUBY_EVENT_C_RETURN:
       case RUBY_EVENT_RETURN:
-        if (slow_tracer.num_calls > 0) {
-          slow_tracer.num_calls--;
+        if (rbtracer.num_calls > 0) {
+          rbtracer.num_calls--;
 
-          if (slow_tracer.num_calls < MAX_CALLS)
-            diff = usec - slow_tracer.call_times[ slow_tracer.num_calls ];
+          if (rbtracer.num_calls < MAX_CALLS)
+            diff = usec - rbtracer.call_times[ rbtracer.num_calls ];
         }
         break;
     }
 
-    if (diff > slow_tracer.threshold * 1e3) {
+    if (diff > rbtracer.threshold * 1e3) {
       SEND_EVENT(
         "%s,-1,%" PRIu64 ",%d,%s,%d,%s",
         event == RUBY_EVENT_RETURN ? "slow" : "cslow",
         diff,
-        slow_tracer.num_calls,
+        rbtracer.num_calls,
         rb_id2name(mid),
         singleton,
         klass ? rb_class2name(singleton ? self : klass) : ""
@@ -171,19 +185,19 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
   }
 
   // are there specific methods we're waiting for?
-  if (num_tracers == 0) goto out;
+  if (rbtracer.num == 0) goto out;
 
   int i, n;
   rbtracer_t *tracer = NULL;
 
-  for (i=0, n=0; i<MAX_TRACERS && n<num_tracers; i++) {
-    if (tracers[i].query) {
+  for (i=0, n=0; i<MAX_TRACERS && n<rbtracer.num; i++) {
+    if (rbtracer.list[i].query) {
       n++;
 
-      if (!tracers[i].mid || tracers[i].mid == mid) {
-        if (!tracers[i].klass || tracers[i].klass == klass) {
-          if (!tracers[i].self || tracers[i].self == self) {
-            tracer = &tracers[i];
+      if (!rbtracer.list[i].mid || rbtracer.list[i].mid == mid) {
+        if (!rbtracer.list[i].klass || rbtracer.list[i].klass == klass) {
+          if (!rbtracer.list[i].self || rbtracer.list[i].self == self) {
+            tracer = &rbtracer.list[i];
           }
         }
       }
@@ -265,7 +279,7 @@ out:
 static void
 event_hook_install()
 {
-  if (!event_hook_installed) {
+  if (!rbtracer.installed) {
     rb_add_event_hook(
       event_hook,
       RUBY_EVENT_CALL   | RUBY_EVENT_C_CALL |
@@ -274,16 +288,16 @@ event_hook_install()
       , 0
 #endif
     );
-    event_hook_installed = true;
+    rbtracer.installed = true;
   }
 }
 
 static void
 event_hook_remove()
 {
-  if (event_hook_installed) {
+  if (rbtracer.installed) {
     rb_remove_event_hook(event_hook);
-    event_hook_installed = false;
+    rbtracer.installed = false;
   }
 }
 
@@ -296,16 +310,16 @@ rbtracer_remove(char *query, int id)
 
   if (query) {
     for (i=0; i<MAX_TRACERS; i++) {
-      if (tracers[i].query) {
-        if (0 == strcmp(query, tracers[i].query)) {
-          tracer = &tracers[i];
+      if (rbtracer.list[i].query) {
+        if (0 == strcmp(query, rbtracer.list[i].query)) {
+          tracer = &rbtracer.list[i];
           break;
         }
       }
     }
   } else {
     if (id >= MAX_TRACERS) goto out;
-    tracer = &tracers[id];
+    tracer = &rbtracer.list[id];
   }
 
   if (tracer->query) {
@@ -323,8 +337,8 @@ rbtracer_remove(char *query, int id)
       tracer->num_exprs = 0;
     }
 
-    num_tracers--;
-    if (num_tracers == 0)
+    rbtracer.num--;
+    if (rbtracer.num == 0)
       event_hook_remove();
   }
 
@@ -342,7 +356,7 @@ rbtracer_remove_all()
 {
   int i;
   for (i=0; i<MAX_TRACERS; i++) {
-    if (tracers[i].query) {
+    if (rbtracer.list[i].query) {
       rbtracer_remove(NULL, i);
     }
   }
@@ -355,11 +369,11 @@ rbtracer_add(char *query)
   int tracer_id = -1;
   rbtracer_t *tracer = NULL;
 
-  if (num_tracers >= MAX_TRACERS) goto out;
+  if (rbtracer.num >= MAX_TRACERS) goto out;
 
   for (i=0; i<MAX_TRACERS; i++) {
-    if (!tracers[i].query) {
-      tracer = &tracers[i];
+    if (!rbtracer.list[i].query) {
+      tracer = &rbtracer.list[i];
       tracer_id = i;
       break;
     }
@@ -404,10 +418,10 @@ rbtracer_add(char *query)
   tracer->query = strdup(query);
   tracer->num_exprs = 0;
 
-  if (num_tracers == 0)
+  if (rbtracer.num == 0)
     event_hook_install();
 
-  num_tracers++;
+  rbtracer.num++;
 
 out:
   SEND_EVENT(
@@ -426,7 +440,7 @@ rbtracer_add_expr(int id, char *expr)
   rbtracer_t *tracer = NULL;
 
   if (id >= MAX_TRACERS) goto out;
-  tracer = &tracers[id];
+  tracer = &rbtracer.list[id];
 
   if (tracer->query) {
     tracer_id = tracer->id;
@@ -449,10 +463,10 @@ out:
 static void
 rbtracer_watch(uint32_t threshold)
 {
-  if (!slow_tracer.enabled) {
-    slow_tracer.num_calls = 0;
-    slow_tracer.threshold = threshold;
-    slow_tracer.enabled = true;
+  if (!rbtracer.slow) {
+    rbtracer.num_calls = 0;
+    rbtracer.threshold = threshold;
+    rbtracer.slow = true;
 
     event_hook_install();
   }
@@ -461,25 +475,25 @@ rbtracer_watch(uint32_t threshold)
 static void
 rbtracer_unwatch()
 {
-  if (slow_tracer.enabled) {
+  if (rbtracer.slow) {
     event_hook_remove();
 
-    slow_tracer.enabled = false;
+    rbtracer.slow = false;
   }
 }
 
 static void
 msgq_teardown()
 {
-  if (mqo_id != -1) {
-    msgctl(mqo_id, IPC_RMID, NULL);
-    mqo_id = -1;
-    mqo_key = 0;
+  if (rbtracer.mqo_id != -1) {
+    msgctl(rbtracer.mqo_id, IPC_RMID, NULL);
+    rbtracer.mqo_id = -1;
+    rbtracer.mqo_key = 0;
   }
-  if (mqi_id != -1) {
-    msgctl(mqi_id, IPC_RMID, NULL);
-    mqi_id = -1;
-    mqi_key = 0;
+  if (rbtracer.mqi_id != -1) {
+    msgctl(rbtracer.mqi_id, IPC_RMID, NULL);
+    rbtracer.mqi_id = -1;
+    rbtracer.mqi_key = 0;
   }
 }
 
@@ -494,39 +508,39 @@ msgq_setup()
 {
   pid_t pid = getpid();
 
-  if (mqo_key != (key_t)pid ||
-      mqi_key != (key_t)-pid) {
+  if (rbtracer.mqo_key != (key_t)pid ||
+      rbtracer.mqi_key != (key_t)-pid) {
     msgq_teardown();
   } else {
     return;
   }
 
-  mqo_key = (key_t) pid;
-  mqo_id  = msgget(mqo_key, 0666 | IPC_CREAT);
+  rbtracer.mqo_key = (key_t) pid;
+  rbtracer.mqo_id  = msgget(rbtracer.mqo_key, 0666 | IPC_CREAT);
 
-  if (mqo_id == -1)
+  if (rbtracer.mqo_id == -1)
     fprintf(stderr, "msgget() failed to create msgq\n");
 
 
-  mqi_key = (key_t) -pid;
-  mqi_id  = msgget(mqi_key, 0666 | IPC_CREAT);
+  rbtracer.mqi_key = (key_t) -pid;
+  rbtracer.mqi_id  = msgget(rbtracer.mqi_key, 0666 | IPC_CREAT);
 
-  if (mqi_id == -1)
+  if (rbtracer.mqi_id == -1)
     fprintf(stderr, "msgget() failed to create msgq\n");
 
   /*
   struct msqid_ds stat;
   int ret;
 
-  msgctl(mqo_id, IPC_STAT, &stat);
+  msgctl(rbtracer.mqo_id, IPC_STAT, &stat);
   printf("cbytes: %lu, qbytes: %lu, qnum: %lu\n", stat.msg_cbytes, stat.msg_qbytes, stat.msg_qnum);
 
   stat.msg_qbytes += 10;
-  ret = msgctl(mqo_id, IPC_SET, &stat);
+  ret = msgctl(rbtracer.mqo_id, IPC_SET, &stat);
   printf("cbytes: %lu, qbytes: %lu, qnum: %lu\n", stat.msg_cbytes, stat.msg_qbytes, stat.msg_qnum);
   printf("ret: %d, errno: %d\n", ret, errno);
 
-  msgctl(mqo_id, IPC_STAT, &stat);
+  msgctl(rbtracer.mqo_id, IPC_STAT, &stat);
   printf("cbytes: %lu, qbytes: %lu, qnum: %lu\n", stat.msg_cbytes, stat.msg_qbytes, stat.msg_qnum);
   */
 }
@@ -536,7 +550,7 @@ sigurg(int signal)
 {
   static int last_tracer_id = -1; // hax
   msgq_setup();
-  if (mqi_id == -1) return;
+  if (rbtracer.mqi_id == -1) return;
 
   struct event_msg msg;
   char *query = NULL;
@@ -547,7 +561,7 @@ sigurg(int signal)
     int ret = -1;
 
     for (n=0; n<10 && ret==-1; n++)
-      ret = msgrcv(mqi_id, &msg, sizeof(msg)-sizeof(long), 0, IPC_NOWAIT);
+      ret = msgrcv(rbtracer.mqi_id, &msg, sizeof(msg)-sizeof(long), 0, IPC_NOWAIT);
 
     if (ret == -1) {
       break;
@@ -592,7 +606,7 @@ void
 Init_rbtrace()
 {
   // zero out tracer
-  memset(&tracers, 0, sizeof(tracers));
+  memset(&rbtracer.list, 0, sizeof(rbtracer.list));
 
   // catch signal telling us to read from the msgq
   signal(SIGURG, sigurg);
