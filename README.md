@@ -19,6 +19,7 @@ rbtrace works on ruby 1.8 and 1.9, running on linux or mac osx.
 
     class String
       def multiply_vowels(num)
+        @test = 123
         gsub(/[aeiou]/){ |m| m*num }
       end
     end
