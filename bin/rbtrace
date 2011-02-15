@@ -321,7 +321,7 @@ class RBTracer
 
         unless tracer == @last_tracer and @last_tracer[:last] == name
           puts
-          printf ' '*16
+          printf ' '*16 if @show_time
           print @prefix*@nesting if @nesting > 0
           print name
         end
@@ -442,8 +442,6 @@ EOS
       :default => 1
   end
 
-  p opts
-
   RBTracer.check_msgmnb
   RBTracer.cleanup_queues
 
@@ -478,8 +476,10 @@ EOS
   ensure
     if tracer
       tracer.detach
-      STDERR.puts "*** detached from process #{tracer.pid}"
     end
     puts
+    if tracer
+      STDERR.puts "*** detached from process #{tracer.pid}"
+    end
   end
 end

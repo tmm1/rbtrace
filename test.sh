@@ -12,21 +12,21 @@ cleanup() {
 }
 
 trace() {
-  echo ------------------------------------------------------------------------------------------------------
-  echo ./bin/rbtrace $PID $*
-  echo ------------------------------------------------------------------------------------------------------
-  ./bin/rbtrace $PID $* &
+  echo ------------------------------------------
+  echo ./bin/rbtrace -p $PID $*
+  echo ------------------------------------------
+  ./bin/rbtrace -p $PID -r 3 $* &
   sleep 2
   kill $!
   wait $! || true
   echo
 }
 
-trace sleep
-trace sleep Dir.chdir Dir.pwd Process.pid "String#gsub" "String#*"
-trace "Kernel#"
-trace "String#gsub(self,@test)" "String#*(self,__source__)" "String#multiply_vowels(self,self.length,num)"
-trace watch 250
-trace firehose
+trace -m sleep
+trace -m sleep Dir.chdir Dir.pwd Process.pid "String#gsub" "String#*"
+trace -m "Kernel#"
+trace -m "String#gsub(self,@test)" "String#*(self,__source__)" "String#multiply_vowels(self,self.length,num)"
+trace --slow=250
+trace --firehose
 
 cleanup
