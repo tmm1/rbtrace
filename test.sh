@@ -18,7 +18,6 @@ trace() {
   ./bin/rbtrace $PID $* &
   sleep 2
   kill $!
-  wait $!
   echo
 }
 
