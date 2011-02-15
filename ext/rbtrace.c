@@ -68,6 +68,8 @@ struct event_msg {
 static struct {
   bool installed;
 
+  bool firehose;
+
   bool slow;
   uint64_t call_times[MAX_CALLS];
   int num_calls;
@@ -83,6 +85,8 @@ static struct {
 }
 rbtracer = {
   .installed = false,
+
+  .firehose = false,
 
   .slow = false,
   .num_calls = 0,
@@ -184,28 +188,30 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
     goto out;
   }
 
-  // are there specific methods we're waiting for?
-  if (rbtracer.num == 0) goto out;
-
   int i, n;
   rbtracer_t *tracer = NULL;
 
-  for (i=0, n=0; i<MAX_TRACERS && n<rbtracer.num; i++) {
-    if (rbtracer.list[i].query) {
-      n++;
+  if (!rbtracer.firehose) {
+    // are there specific methods we're waiting for?
+    if (rbtracer.num == 0) goto out;
 
-      if (!rbtracer.list[i].mid || rbtracer.list[i].mid == mid) {
-        if (!rbtracer.list[i].klass || rbtracer.list[i].klass == klass) {
-          if (!rbtracer.list[i].self || rbtracer.list[i].self == self) {
-            tracer = &rbtracer.list[i];
+    for (i=0, n=0; i<MAX_TRACERS && n<rbtracer.num; i++) {
+      if (rbtracer.list[i].query) {
+        n++;
+
+        if (!rbtracer.list[i].mid || rbtracer.list[i].mid == mid) {
+          if (!rbtracer.list[i].klass || rbtracer.list[i].klass == klass) {
+            if (!rbtracer.list[i].self || rbtracer.list[i].self == self) {
+              tracer = &rbtracer.list[i];
+            }
           }
         }
       }
     }
-  }
 
-  // no matching method tracer found, so bail!
-  if (!tracer) goto out;
+    // no matching method tracer found, so bail!
+    if (!tracer) goto out;
+  }
 
   switch (event) {
     case RUBY_EVENT_C_CALL:
@@ -213,13 +219,13 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
       SEND_EVENT(
         "%s,%d,%s,%d,%s",
         event == RUBY_EVENT_CALL ? "call" : "ccall",
-        tracer->id,
+        tracer ? tracer->id : 255, // hax
         rb_id2name(mid),
         singleton,
         klass ? rb_class2name(singleton ? self : klass) : ""
       );
 
-      if (tracer->num_exprs) {
+      if (tracer && tracer->num_exprs) {
         for (i=0; i<tracer->num_exprs; i++) {
           char *expr = tracer->exprs[i];
           size_t len = strlen(expr);
@@ -267,7 +273,7 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
       SEND_EVENT(
         "%s,%d",
         event == RUBY_EVENT_RETURN ? "return" : "creturn",
-        tracer->id
+        tracer ? tracer->id : 255 // hax
       );
       break;
   }
@@ -354,6 +360,8 @@ out:
 static void
 rbtracer_remove_all()
 {
+  rbtracer.firehose = false;
+
   int i;
   for (i=0; i<MAX_TRACERS; i++) {
     if (rbtracer.list[i].query) {
@@ -466,6 +474,7 @@ rbtracer_watch(uint32_t threshold)
   if (!rbtracer.slow) {
     rbtracer.num_calls = 0;
     rbtracer.threshold = threshold;
+    rbtracer.firehose = false;
     rbtracer.slow = true;
 
     event_hook_install();
@@ -478,6 +487,7 @@ rbtracer_unwatch()
   if (rbtracer.slow) {
     event_hook_remove();
 
+    rbtracer.firehose = false;
     rbtracer.slow = false;
   }
 }
@@ -580,6 +590,10 @@ sigurg(int signal)
 
       } else if (0 == strncmp("delall", msg.buf, 6)) {
         rbtracer_remove_all();
+
+      } else if (0 == strncmp("firehose", msg.buf, 8)) {
+        rbtracer.firehose = true;
+        event_hook_install();
 
       } else if (0 == strncmp("addexpr,", msg.buf, 8)) {
         query = msg.buf + 8;

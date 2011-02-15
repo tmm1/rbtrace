@@ -4,7 +4,16 @@ require 'ffi'
 
 module RBTracer
   def self.process_line(line)
-    @tracers ||= {}
+    @tracers ||= Hash.new{ |h,k|
+      h[k] = {
+        :name => name,
+        :times => [],
+        :names => [],
+        :exprs => {},
+        :last => false,
+        :arglist => false
+      }
+    }
     @nesting ||= 0
     @last_tracer ||= nil
 
@@ -19,14 +28,8 @@ module RBTracer
         puts line
       else
         name = args.first
-        @tracers[id] = {
-          :name => name,
-          :times => [],
-          :names => [],
-          :exprs => {},
-          :last => false,
-          :arglist => false
-        }
+        @tracers.delete(id)
+        @tracers[id]
       end
 
     when 'remove'
@@ -228,7 +231,7 @@ if qi == -1 || qo == -1
   raise 'pid is not listening for messages'
 else
   begin
-    if funcs.first == 'watch'
+    if %w[ watch firehose ].include?(funcs.first)
       EventMsg.send_cmd(qo, funcs.join(','))
       Process.kill 'URG', pid
     else

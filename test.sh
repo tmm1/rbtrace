@@ -26,5 +26,6 @@ trace sleep Dir.chdir Dir.pwd Process.pid "String#gsub" "String#*"
 trace "Kernel#"
 trace "String#gsub(self,@test)" "String#*(self)" "String#multiply_vowels(self,self.length,num,__file__)"
 trace watch 250
+trace firehose
 
 cleanup
