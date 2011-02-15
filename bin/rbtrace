@@ -176,7 +176,7 @@ class RBTracer
   # Returns nothing.
   def add(methods)
     Array(methods).each do |func|
-      func.strip!
+      func = func.strip
 
       if func =~ /^(.+)\((.+?)\)$/
         func, args = $1, $2
@@ -195,8 +195,20 @@ class RBTracer
   #
   # Returns nothing.
   def detach
-    send_cmd('detach')
+    begin
+      send_cmd('detach')
+    rescue Errno::ESRCH
+    end
+
     puts
+
+    # drain queue
+    5.times do
+      begin
+        true while recv_cmd(false)
+      rescue
+      end
+    end
   end
 
   # Process events from the traced process.

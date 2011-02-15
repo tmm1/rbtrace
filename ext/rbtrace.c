@@ -22,6 +22,10 @@
 #include <node.h>
 #define rb_sourcefile() (ruby_current_node ? ruby_current_node->nd_file : 0)
 #define rb_sourceline() (ruby_current_node ? nd_line(ruby_current_node) : 0)
+#else
+// this is a nasty hack, and will probably break on anything except 1.9.2p136
+int rb_thread_method_id_and_class(void *th, ID *idp, VALUE *klassp);
+RUBY_EXTERN void *ruby_current_thread;
 #endif
 
 #ifndef RSTRING_PTR
@@ -141,6 +145,18 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
   // skip allocators
   if (mid == ID_ALLOCATOR) goto out;
 
+  // some serious 1.9.2 hax
+#ifdef RUBY_VM
+  if (mid == 0 && ruby_current_thread) {
+    ID _mid;
+    VALUE _klass;
+    rb_thread_method_id_and_class(ruby_current_thread, &_mid, &_klass);
+
+    mid = _mid;
+    klass = _klass;
+  }
+#endif
+
   // normalize klass and check for class-level methods
   bool singleton = 0;
   if (klass) {
@@ -215,8 +231,8 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
   }
 
   switch (event) {
-    case RUBY_EVENT_C_CALL:
     case RUBY_EVENT_CALL:
+    case RUBY_EVENT_C_CALL:
       SEND_EVENT(
         "%s,%d,%s,%d,%s",
         event == RUBY_EVENT_CALL ? "call" : "ccall",
@@ -269,8 +285,8 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
       }
       break;
 
-    case RUBY_EVENT_C_RETURN:
     case RUBY_EVENT_RETURN:
+    case RUBY_EVENT_C_RETURN:
       SEND_EVENT(
         "%s,%d",
         event == RUBY_EVENT_RETURN ? "return" : "creturn",
