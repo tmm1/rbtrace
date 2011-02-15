@@ -1,9 +1,9 @@
 PATH
   remote: .
   specs:
-    rbtrace (0.1.0)
-      ffi
-      trollop
+    rbtrace (0.2.3)
+      ffi (>= 1.0.5)
+      trollop (>= 1.16.2)
 
 GEM
   remote: http://rubygems.org/
