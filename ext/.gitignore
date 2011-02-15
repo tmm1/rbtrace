@@ -1,0 +1,4 @@
+Makefile
+*.bundle
+*.o
+*.so
