@@ -8,7 +8,7 @@ export PID=$!
 trap cleanup SIGINT SIGTERM
 cleanup() {
   kill $PID
-  wait $PID
+  wait $PID || true
 }
 
 trace() {
@@ -18,6 +18,7 @@ trace() {
   ./bin/rbtrace $PID $* &
   sleep 2
   kill $!
+  wait $! || true
   echo
 }
 
