@@ -2,11 +2,141 @@
 require 'rubygems'
 require 'ffi'
 
-module RBTracer
-  def self.process_line(line)
-    @tracers ||= Hash.new{ |h,k|
+module FFI::LastError
+  def self.exception
+    Errno::constants.map(&Errno.method(:const_get)).find{ |c| c.const_get(:Errno) == error }
+  end
+  def self.raise(msg=nil)
+    Kernel.raise exception, msg
+  end
+end
+
+module MsgQ
+  extend FFI::Library
+  ffi_lib 'c'
+
+  class EventMsg < FFI::Struct
+    BUF_SIZE = RUBY_PLATFORM =~ /linux/ ? 256 : 120
+    IPC_NOWAIT = 004000
+
+    layout :mtype, :long,
+           :buf, [:char, BUF_SIZE]
+
+    def self.send_cmd(q, str)
+      msg = EventMsg.new
+      msg[:mtype] = 1
+      msg[:buf].to_ptr.put_string(0, str)
+
+      ret = MsgQ.msgsnd(q, msg, BUF_SIZE, 0)
+      FFI::LastError.raise if ret == -1
+    end
+
+    def self.recv_cmd(q, block=true)
+      msg = EventMsg.new
+      ret = MsgQ.msgrcv(q, msg, BUF_SIZE, 0, block ? 0 : IPC_NOWAIT)
+      if ret == -1
+        if !block and [Errno::EAGAIN, Errno::ENOMSG].include?(FFI::LastError.exception)
+          return nil
+        end
+
+        FFI::LastError.raise
+      end
+
+      msg[:buf].to_ptr.read_string
+    end
+  end
+
+  attach_function :msgget, [:int, :int], :int
+  attach_function :msgrcv, [:int, EventMsg.ptr, :size_t, :long, :int], :int
+  attach_function :msgsnd, [:int, EventMsg.ptr, :size_t, :int], :int
+end
+
+class RBTracer
+  # Suggest increasing the maximum number of bytes allowed on
+  # a message queue to 1MB.
+  #
+  # This defaults to 16k on Linux, and is hardcoded to 2k in OSX kernel.
+  #
+  # Returns nothing.
+  def self.check_msgmnb
+    if File.exists?(msgmnb = "/proc/sys/kernel/msgmnb")
+      curr = File.read(msgmnb).to_i
+      max = 1024*1024
+      if curr < max
+        STDERR.puts "*** run `sudo sysctl kernel.msgmnb=#{max}` to prevent losing events (currently: #{curr} bytes)"
+      end
+    end
+  end
+
+  # Look for any message queues pairs (pid/-pid) that no longer have an
+  # associated process alive, and remove them.
+  #
+  # Returns nothing.
+  def self.cleanup_queues
+    if (pids = `ps ax -o pid`.split("\n").map{ |p| p.strip.to_i }).any?
+      ipcs = `ipcs -q`.split("\n").grep(/^q/).map{ |line| line.strip.split[2] }
+      ipcs.each do |ipci|
+        next if ipci.match(/^0xf/)
+
+        qi = ipci.to_i(16)
+        qo = 0xffffffff - qi + 1
+        ipco = "0x#{qo.to_s(16)}"
+
+        if ipcs.include?(ipco) and !pids.include?(qi)
+          STDERR.puts "*** removing stale message queue pair: #{ipci}/#{ipco}"
+          system("ipcrm -Q #{ipci} -Q #{ipco}")
+        end
+      end
+    end
+  end
+
+  # Public: The Fixnum pid of the traced process.
+  attr_reader   :pid
+
+  # Public: The IO where tracing output is written (default: STDOUT).
+  attr_accessor :out
+
+  # The String prefix used on nested method calls (default: ' ').
+  attr_accessor :prefix
+
+  # The Boolean flag for showing how long method calls take (default: true).
+  attr_accessor :show_duration
+
+  # The Boolean flag for showing the timestamp when method calls start (default: false).
+  attr_accessor :show_time
+
+  # Create a new tracer
+  #
+  # pid - The String of Fixnum process id
+  #
+  # Returns a tracer.
+  def initialize(pid)
+    begin
+      raise ArgumentError unless pid
+      @pid = pid.to_i
+      raise ArgumentError unless @pid > 0
+      Process.kill(0, @pid)
+    rescue TypeError, ArgumentError
+      raise ArgumentError, 'pid required'
+    rescue Errno::ESRCH
+      raise ArgumentError, 'invalid pid'
+    rescue Errno::EPERM
+      raise ArgumentError, 'could not signal process (run as root)'
+    end
+
+    Process.kill 'URG', @pid
+    sleep 0.25 # wait for process to create msgqs
+
+    @qi = MsgQ.msgget( pid, 0666)
+    @qo = MsgQ.msgget(-pid, 0666)
+
+    if @qi == -1 || @qo == -1
+      raise ArgumentError, 'pid is not listening for messages (did you `require "rbtrace"`)'
+    end
+
+    @tracers = Hash.new{ |h,k|
       h[k] = {
-        :name => name,
+        :name => nil,
         :times => [],
         :names => [],
         :exprs => {},
@@ -14,9 +144,100 @@ module RBTracer
         :arglist => false
       }
     }
-    @nesting ||= 0
-    @last_tracer ||= nil
+    @nesting = 0
+    @last_tracer = nil
+    @out = STDOUT
+    @prefix = ' '
+    @show_time = false
+    @show_duration = true
+  end
 
+  # Watch for method calls slower than a threshold.
+  #
+  # msec - The Fixnum threshold in milliseconds
+  #
+  # Returns nothing.
+  def watch(msec)
+    send_cmd("watch,#{msec}")
+  end
+
+  # Turn on the firehose (show all method calls).
+  #
+  # Returns nothing.
+  def firehose
+    send_cmd('firehose')
+  end
+
+  # Add tracers for the given list of methods.
+  #
+  # methods - The String or Array of method selectors to trace.
+  #
+  # Returns nothing.
+  def add(methods)
+    Array(methods).each do |func|
+      func.strip!
+
+      if func =~ /^(.+)\((.+?)\)$/
+        func, args = $1, $2
+        args = args.split(',').map{ |a| a.strip }
+      end
+
+      send_cmd("add,#{func}")
+
+      args.each do |arg|
+        send_cmd("addexpr,#{arg}")
+      end if args and args.any?
+    end
+  end
+
+  # Detach from the traced process.
+  #
+  # Returns nothing.
+  def detach
+    send_cmd('detach')
+  end
+
+  # Process events from the traced process.
+  #
+  # Returns nothing.
+  def recv_loop
+    while true
+      # block until a message arrives
+      lines = [recv_cmd]
+
+      # check to see if there are more messages and pull them off
+      # so the queue doesn't fill up in kernel land
+      25.times do
+        break unless line = recv_cmd(false)
+        lines << line
+      end
+
+      lines.each do |line|
+        process_line(line)
+      end
+    end
+  end
+
+  private
+
+  def send_cmd(msg)
+    MsgQ::EventMsg.send_cmd(@qo, msg)
+    Process.kill 'URG', @pid
+  end
+
+  def recv_cmd(block=true)
+    MsgQ::EventMsg.recv_cmd(@qi, block)
+  end
+
+  def print(*args)
+    @out.print(*args)
+  end
+
+  def puts(*args)
+    @out.puts(*args)
+  end
+
+  def process_line(line)
     time, event, id, *args = line.strip.split(',')
     time = time.to_i
     id = id.to_i
@@ -29,7 +250,7 @@ module RBTracer
       else
         name = args.first
         @tracers.delete(id)
-        @tracers[id]
+        @tracers[id][:name] = name
       end
 
     when 'remove'
@@ -76,7 +297,12 @@ module RBTracer
         @last_tracer[:arglist] = false
       end
       puts
-      print ' '*@nesting if @nesting > 0
+      if @show_time
+        t = Time.at(time/1_000_000)
+        print t.strftime("%H:%M:%S.")
+        print "%06d " % (time - t.to_f*1_000_000).round
+      end
+      print @prefix*@nesting if @nesting > 0
       print name
 
       @nesting += 1
@@ -95,10 +321,11 @@ module RBTracer
 
         unless tracer == @last_tracer and @last_tracer[:last] == name
           puts
-          print ' '*@nesting if @nesting > 0
+          printf ' '*16
+          print @prefix*@nesting if @nesting > 0
           print name
         end
-        print ' <%f>' % (diff/1_000_000.0)
+        print ' <%f>' % (diff/1_000_000.0) if @show_duration
         puts if @nesting == 0 and (tracer != @last_tracer || @last_tracer[:last] != name)
       end
 
@@ -113,10 +340,13 @@ module RBTracer
       name = klass ? "#{klass}#{ is_singleton ? '.' : '#' }" : ''
       name += method
 
-      print ' '*nesting if nesting > 0
+      print @prefix*nesting if nesting > 0
       print name
-      print ' '
-      puts "<%f>" % (diff/1_000_000.0)
+      if @show_duration
+        print ' '
+        print "<%f>" % (diff/1_000_000.0)
+      end
+      puts
       puts if nesting == 0
 
     else
@@ -124,154 +354,132 @@ module RBTracer
 
     end
   rescue => e
-    puts "error on: #{line}"
+    STDERR.puts "error on: #{line}"
     raise e
   end
 end
 
-class EventMsg < FFI::Struct
-  BUF_SIZE = RUBY_PLATFORM =~ /linux/ ? 256 : 120
-  IPC_NOWAIT = 004000
+if __FILE__ == $0
+  require 'trollop'
 
-  layout :mtype, :long,
-         :buf, [:char, BUF_SIZE]
+  opts = Trollop.options do
+    version <<-EOS
+rbtrace: like strace, but for ruby code
+  version 0.2.0
+  (c) 2011 Aman Gupta (tmm1)
+  http://github.com/tmm1/rbtrace
+EOS
 
-  def self.send_cmd(q, str)
-    msg = EventMsg.new
-    msg[:mtype] = 1
-    msg[:buf].to_ptr.put_string(0, str)
+    banner <<-EOS
+rbtrace shows you method calls happening inside another ruby process in real time.
 
-    ret = MsgQ.msgsnd(q, msg, BUF_SIZE, 0)
-    FFI::LastError.raise if ret == -1
+to use, simply `require "rbtrace"` in your ruby app.
+
+Usage:
+
+  rbtrace -p <PID>         # trace the given process
+  rbtrace -o <FILE>        # write output to file
+  rbtrace -t               # show method call start time
+  rbtrace -T               # show duration of each method call
+  rbtrace -n 3             # use 3 spaces to nest method calls
+
+Tracers:
+
+  rbtrace --firehose       # trace all method calls
+  rbtrace --slow=250       # trace method calls slower than 250ms
+  rbtrace --methods a b c  # trace calls to given methods
+
+Method Selectors:
+
+  sleep                    # any instance or class method named sleep
+  String#gsub              # specific instance method
+  Process.pid              # specific class method
+  Dir.                     # any class methods in Dir
+  Fixnum#                  # any instance methods of Fixnum
+
+Trace Expressions:
+
+  method(self)             # value of self at method invocation
+  method(@ivar)            # value of given instance variable
+  method(arg1, arg2)       # value of argument local variables
+  method(self.attr)        # value of arbitrary ruby expression
+  method(__source__)       # source file/line of callsite
+
+All Options:\n
+
+EOS
+    opt :pid,
+      "pid of the ruby process to trace",
+      :short => '-p',
+      :type => :int
+
+    opt :firehose,
+      "show all method calls"
+
+    opt :slow,
+      "watch for method calls slower than 250 milliseconds",
+      :default => 250
+
+    opt :methods,
+      "method(s) to trace (valid formats: sleep String#gsub Process.pid Kernel# Dir.)",
+      :type => :strings,
+      :short => '-m'
+
+    opt :start_time,
+      "show start time for each method call",
+      :short => '-t'
+
+    opt :no_duration,
+      "hide time spent in each method call",
+      :default => false
+
+    opt :output,
+      "write trace to filename",
+      :type => String
+
+    opt :prefix,
+      "prefix nested method calls with N spaces",
+      :default => 1
   end
 
-  def self.recv_cmd(q, block=true)
-    msg = EventMsg.new
-    ret = MsgQ.msgrcv(q, msg, BUF_SIZE, 0, block ? 0 : IPC_NOWAIT)
-    if ret == -1
-      if !block and [Errno::EAGAIN, Errno::ENOMSG].include?(FFI::LastError.exception)
-        return nil
-      end
+  p opts
 
-      FFI::LastError.raise
-    end
+  RBTracer.check_msgmnb
+  RBTracer.cleanup_queues
 
-    msg[:buf].to_ptr.read_string
-  end
-end
-
-module FFI::LastError
-  def self.exception
-    Errno::constants.map(&Errno.method(:const_get)).find{ |c| c.const_get(:Errno) == error }
-  end
-  def self.raise(msg=nil)
-    Kernel.raise exception, msg
-  end
-end
-
-module MsgQ
-  extend FFI::Library
-
-  ffi_lib 'c'
-  attach_function :msgget, [:int, :int], :int
-  attach_function :msgrcv, [:int, EventMsg.ptr, :size_t, :long, :int], :int
-  attach_function :msgsnd, [:int, EventMsg.ptr, :size_t, :int], :int
-end
-
-if (pids = `ps ax -o pid`.split("\n").map{ |p| p.strip.to_i }).any?
-  ipcs = `ipcs -q`.split("\n").grep(/^q/).map{ |line| line.strip.split[2] }
-  ipcs.each do |ipci|
-    next if ipci.match(/^0xf/)
-
-    qi = ipci.to_i(16)
-    qo = 0xffffffff - qi + 1
-    ipco = "0x#{qo.to_s(16)}"
-
-    if ipcs.include?(ipco) and !pids.include?(qi)
-      STDERR.puts "** removing stale message queue pair: #{ipci}/#{ipco}"
-      system("ipcrm -Q #{ipci} -Q #{ipco}")
-    end
-  end
-end
-
-if File.exists?(msgmnb = "/proc/sys/kernel/msgmnb")
-  curr = File.read(msgmnb).to_i
-  max = 1024*1024
-  if curr < max
-    STDERR.puts "** run `sudo sysctl kernel.msgmnb=#{max}` to prevent losing events (currently: #{curr} bytes)"
-  end
-end
-
-raise 'invalid pid' unless ARGV[0]
-
-begin
-  raise ArgumentError unless pid = ARGV[0]
-  pid = pid.to_i
-  raise ArgumentError unless pid > 0
-  Process.kill(0,pid)
-rescue TypeError, ArgumentError
-  raise 'pid required'
-rescue Errno::ESRCH
-  raise 'invalid pid'
-rescue Errno::EPERM
-  raise 'could not signal process (run as root)'
-end
-
-funcs = [ARGV[1] || 'sleep']
-if ARGV.size > 2
-  funcs += ARGV[2..-1]
-end
-
-Process.kill 'URG', pid
-sleep 0.25 # wait for process to create msgqs
-
-qi = MsgQ.msgget(pid, 0666)
-qo = MsgQ.msgget(-pid, 0666)
-
-if qi == -1 || qo == -1
-  raise 'pid is not listening for messages'
-else
   begin
-    if %w[ watch firehose ].include?(funcs.first)
-      EventMsg.send_cmd(qo, funcs.join(','))
-      Process.kill 'URG', pid
-    else
-      funcs.each do |func|
-        func.strip!
-        if func =~ /^(.+)\((.+?)\)$/
-          func, args = $1, $2
-          args = args.split(',').map{ |a| a.strip }
-        end
-
-        EventMsg.send_cmd(qo, "add,#{func}")
-        Process.kill 'URG', pid
-
-        if args and args.any?
-          args.each do |arg|
-            EventMsg.send_cmd(qo, "addexpr,#{arg}")
-            Process.kill 'URG', pid
-          end
-        end
-      end
+    begin
+      tracer = RBTracer.new(opts[:pid])
+    rescue ArgumentError => e
+      Trollop.die :pid, "invalid (#{e.message})"
     end
 
-    while true
-      # block until a message arrives
-      lines = [EventMsg.recv_cmd(qi)]
+    if opts[:slow_given]
+      tracer.watch(opts[:slow])
+    elsif opts[:firehose]
+      tracer.firehose
+    elsif methods = opts[:methods]
+      tracer.add(methods)
+    end
 
-      # check to see if there are more messages and pull them off
-      # so the queue doesn't fill up in kernel land
-      25.times do
-        break unless line = EventMsg.recv_cmd(qi, false)
-        lines << line
-      end
+    if out = opts[:output]
+      tracer.out = File.open(out,'w')
+    end
 
-      lines.each do |line|
-        RBTracer.process_line(line)
-      end
+    tracer.prefix = ' ' * opts[:prefix]
+    tracer.show_duration = !opts[:no_duration]
+    tracer.show_time = opts[:start_time]
+
+    begin
+      STDERR.puts "*** attached to process #{tracer.pid}"
+      tracer.recv_loop
+    rescue Interrupt
     end
   ensure
-    EventMsg.send_cmd(qo, funcs.first == 'watch' ? 'unwatch' : 'delall')
-    Process.kill 'URG', pid
+    if tracer
+      tracer.detach
+      STDERR.puts "*** detached from process #{tracer.pid}"
+    end
+    puts
   end
 end

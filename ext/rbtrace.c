@@ -362,6 +362,7 @@ static void
 rbtracer_remove_all()
 {
   rbtracer.firehose = false;
+  rbtracer.slow = false;
 
   int i;
   for (i=0; i<MAX_TRACERS; i++) {
@@ -589,9 +590,6 @@ sigurg(int signal)
         query = msg.buf + 4;
         rbtracer_remove(query, -1);
 
-      } else if (0 == strncmp("delall", msg.buf, 6)) {
-        rbtracer_remove_all();
-
       } else if (0 == strncmp("firehose", msg.buf, 8)) {
         rbtracer.firehose = true;
         event_hook_install();
@@ -611,6 +609,9 @@ sigurg(int signal)
 
       } else if (0 == strncmp("unwatch", msg.buf, 7)) {
         rbtracer_unwatch();
+
+      } else if (0 == strncmp("detach", msg.buf, 6)) {
+        rbtracer_remove_all();
 
       }
     }

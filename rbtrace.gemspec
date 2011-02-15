@@ -1,6 +1,6 @@
 Gem::Specification.new do |s|
   s.name = 'rbtrace'
-  s.version = '0.1.0'
+  s.version = '0.2.0'
   s.homepage = 'http://github.com/tmm1/rbtrace'
 
   s.authors = "Aman Gupta"
@@ -13,6 +13,8 @@ Gem::Specification.new do |s|
   s.executables << 'rbtrace'
 
   s.add_dependency 'ffi'
+  s.add_dependency 'trollop'
 
   s.summary = 'rbtrace: like strace but for ruby code'
+  s.description = 'rbtrace shows you method calls happening inside another ruby process in real time.'
 end
