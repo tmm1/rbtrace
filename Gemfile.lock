@@ -1,0 +1,20 @@
+PATH
+  remote: .
+  specs:
+    rbtrace (0.1.0)
+      ffi
+      trollop
+
+GEM
+  remote: http://rubygems.org/
+  specs:
+    ffi (1.0.5)
+      rake (>= 0.8.7)
+    rake (0.8.7)
+    trollop (1.16.2)
+
+PLATFORMS
+  ruby
+
+DEPENDENCIES
+  rbtrace!
