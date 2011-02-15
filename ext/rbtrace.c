@@ -39,7 +39,13 @@ timeofday_usec()
   return (uint64_t)tv.tv_sec*1e6 + (uint64_t)tv.tv_usec;
 }
 
-#define MAX_EXPRS 10
+#define MAX_CALLS 32768 // up to this many stack frames examined in slow watch mode
+#define MAX_TRACERS 100 // max method tracers
+#define MAX_EXPRS 10    // max expressions per tracer
+#ifndef BUF_SIZE        // msgq buffer size
+#define BUF_SIZE 120
+#endif
+
 struct rbtracer_t {
   int id;
 
@@ -53,17 +59,12 @@ struct rbtracer_t {
 };
 typedef struct rbtracer_t rbtracer_t;
 
-#ifndef BUF_SIZE
-#define BUF_SIZE 120
-#endif
 
 struct event_msg {
   long mtype;
   char buf[BUF_SIZE];
 };
 
-#define MAX_CALLS 32768
-#define MAX_TRACERS 100
 
 static struct {
   bool installed;
