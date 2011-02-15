@@ -374,6 +374,8 @@ rbtrace shows you method calls happening inside another ruby process in real tim
 
 to use rbtrace, simply `require "rbtrace"` in your ruby app.
 
+for examples and more information, see http://github.com/tmm1/rbtrace
+
 Usage:
 
   rbtrace -p <PID>         # trace the given process
