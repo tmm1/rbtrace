@@ -120,7 +120,6 @@ rbtrace works on ruby 1.8 and 1.9, running on linux or mac osx.
 ## todo
 
 * create message queues lazily (on first signal/after fork)
-* remove ruby api
 * switch ipc to msgpack instead of csv
 * add some simple tests
 * add triggers to start tracing slow methods inside another method

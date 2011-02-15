@@ -453,30 +453,6 @@ rbtracer_unwatch()
   }
 }
 
-static VALUE
-rbtrace(VALUE self, VALUE query)
-{
-  Check_Type(query, T_STRING);
-
-  char *str = RSTRING_PTR(query);
-  int tracer_id = -1;
-
-  tracer_id = rbtracer_add(str);
-  return tracer_id == -1 ? Qfalse : Qtrue;
-}
-
-static VALUE
-untrace(VALUE self, VALUE query)
-{
-  Check_Type(query, T_STRING);
-
-  char *str = RSTRING_PTR(query);
-  int tracer_id = -1;
-
-  tracer_id = rbtracer_remove(str, -1);
-  return tracer_id == -1 ? Qfalse : Qtrue;
-}
-
 static void
 cleanup()
 {
@@ -587,7 +563,4 @@ Init_rbtrace()
   msgctl(mqo_id, IPC_STAT, &stat);
   printf("cbytes: %lu, qbytes: %lu, qnum: %lu\n", stat.msg_cbytes, stat.msg_qbytes, stat.msg_qnum);
   */
-
-  rb_define_method(rb_cObject, "rbtrace", rbtrace, 1);
-  rb_define_method(rb_cObject, "untrace", untrace, 1);
 }
