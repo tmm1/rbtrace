@@ -238,7 +238,7 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
             val = rb_inspect(self);
 
           } else if (len == 8 && strcmp("__file__", expr) == 0) {
-            snprintf(buffer, len+50, "%s:%d", rb_sourcefile(), rb_sourceline());
+            snprintf(buffer, len+50, "\"%s:%d\"", rb_sourcefile(), rb_sourceline());
             result = buffer;
 
           } else if (len > 1 && expr[0] == '@') {
