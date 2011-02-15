@@ -25,7 +25,7 @@ trace() {
 trace sleep
 trace sleep Dir.chdir Dir.pwd Process.pid "String#gsub" "String#*"
 trace "Kernel#"
-trace "String#gsub(self)" "String#*(self)" "String#multiply_vowels(self,self.length,num)"
+trace "String#gsub(self)" "String#*(self)" "String#multiply_vowels(self,self.length,num,__file__)"
 trace watch 250
 
 cleanup

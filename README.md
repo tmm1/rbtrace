@@ -121,7 +121,6 @@ rbtrace works on ruby 1.8 and 1.9, running on linux or mac osx.
 
 * switch ipc to msgpack instead of csv
 * add triggers to start tracing slow methods only inside another method
-* add rb_source(file|line) expressions
 * optimize local/instance variable lookup to avoid instance_eval
 * add firehose mode
 * use proper option parser in bin/rbtrace

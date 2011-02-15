@@ -17,8 +17,11 @@
 #include <ruby.h>
 
 #ifndef RUBY_VM
-#include <node.h>
+#include <env.h>
 #include <intern.h>
+#include <node.h>
+#define rb_sourcefile() (ruby_current_node ? ruby_current_node->nd_file : 0)
+#define rb_sourceline() (ruby_current_node ? nd_line(ruby_current_node) : 0)
 #endif
 
 #ifndef RSTRING_PTR
@@ -206,21 +209,30 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
         for (i=0; i<tracer->num_exprs; i++) {
           char *expr = tracer->exprs[i];
           size_t len = strlen(expr);
-          VALUE str = Qnil, val = Qnil;
+
+          VALUE val = Qnil;
+          char buffer[len+50];
+          char *result = NULL;
 
           if (len == 4 && strcmp("self", expr) == 0) {
             val = rb_inspect(self);
 
-          } else if (event == RUBY_EVENT_CALL) {
-            char code[len+50];
-            snprintf(code, len+50, "(begin; %s; rescue Exception => e; e; end).inspect", expr);
+          } else if (len == 8 && strcmp("__file__", expr) == 0) {
+            snprintf(buffer, len+50, "%s:%d", rb_sourcefile(), rb_sourceline());
+            result = buffer;
 
-            str = rb_str_new2(code);
+          } else if (event == RUBY_EVENT_CALL) {
+            snprintf(buffer, len+50, "(begin; %s; rescue Exception => e; e; end).inspect", expr);
+
+            VALUE str = rb_str_new2(buffer);
             val = rb_obj_instance_eval(1, &str, self);
           }
 
           if (RTEST(val) && TYPE(val) == T_STRING) {
-            char *result = RSTRING_PTR(val);
+            result = RSTRING_PTR(val);
+          }
+
+          if (result) {
             SEND_EVENT(
               "%s,%d,%d,%s",
               "exprval",
