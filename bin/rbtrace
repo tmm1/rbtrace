@@ -376,7 +376,7 @@ class RBTracer
     opts = Trollop.options do
       version <<-EOS
 rbtrace: like strace, but for ruby code
-  version 0.2.3
+  version 0.2.4
   (c) 2011 Aman Gupta (tmm1)
   http://github.com/tmm1/rbtrace
 EOS
