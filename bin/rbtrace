@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 require 'rubygems'
 require 'ffi'
+require 'trollop'
 
 module FFI::LastError
   def self.exception
@@ -195,6 +196,7 @@ class RBTracer
   # Returns nothing.
   def detach
     send_cmd('detach')
+    puts
   end
 
   # Process events from the traced process.
@@ -357,31 +359,28 @@ class RBTracer
     STDERR.puts "error on: #{line}"
     raise e
   end
-end
 
-if __FILE__ == $0
-  require 'trollop'
-
-  opts = Trollop.options do
-    version <<-EOS
+  def self.run
+    opts = Trollop.options do
+      version <<-EOS
 rbtrace: like strace, but for ruby code
   version 0.2.0
   (c) 2011 Aman Gupta (tmm1)
   http://github.com/tmm1/rbtrace
 EOS
 
-    banner <<-EOS
+      banner <<-EOS
 rbtrace shows you method calls happening inside another ruby process in real time.
 
-to use, simply `require "rbtrace"` in your ruby app.
+to use rbtrace, simply `require "rbtrace"` in your ruby app.
 
 Usage:
 
   rbtrace -p <PID>         # trace the given process
   rbtrace -o <FILE>        # write output to file
   rbtrace -t               # show method call start time
-  rbtrace -T               # show duration of each method call
-  rbtrace -n 3             # use 3 spaces to nest method calls
+  rbtrace -n               # hide duration of each method call
+  rbtrace -r 3             # use 3 spaces to nest method calls
 
 Tracers:
 
@@ -405,81 +404,87 @@ Trace Expressions:
   method(self.attr)        # value of arbitrary ruby expression
   method(__source__)       # source file/line of callsite
 
+
 All Options:\n
 
 EOS
-    opt :pid,
-      "pid of the ruby process to trace",
-      :short => '-p',
-      :type => :int
+      opt :pid,
+        "pid of the ruby process to trace",
+        :type => :int,
+        :short => '-p'
 
-    opt :firehose,
-      "show all method calls"
+      opt :firehose,
+        "show all method calls",
+        :short => '-f'
 
-    opt :slow,
-      "watch for method calls slower than 250 milliseconds",
-      :default => 250
+      opt :slow,
+        "watch for method calls slower than 250 milliseconds",
+        :default => 250,
+        :short => '-s'
 
-    opt :methods,
-      "method(s) to trace (valid formats: sleep String#gsub Process.pid Kernel# Dir.)",
-      :type => :strings,
-      :short => '-m'
+      opt :methods,
+        "method(s) to trace (valid formats: sleep String#gsub Process.pid Kernel# Dir.)",
+        :type => :strings,
+        :short => '-m'
 
-    opt :start_time,
-      "show start time for each method call",
-      :short => '-t'
+      opt :start_time,
+        "show start time for each method call",
+        :short => '-t'
 
-    opt :no_duration,
-      "hide time spent in each method call",
-      :default => false
+      opt :no_duration,
+        "hide time spent in each method call",
+        :default => false,
+        :short => '-n'
 
-    opt :output,
-      "write trace to filename",
-      :type => String
+      opt :output,
+        "write trace to filename",
+        :type => String,
+        :short => '-o'
 
-    opt :prefix,
-      "prefix nested method calls with N spaces",
-      :default => 1
-  end
-
-  RBTracer.check_msgmnb
-  RBTracer.cleanup_queues
-
-  begin
-    begin
-      tracer = RBTracer.new(opts[:pid])
-    rescue ArgumentError => e
-      Trollop.die :pid, "invalid (#{e.message})"
+      opt :prefix,
+        "prefix nested method calls with N spaces",
+        :default => 1,
+        :short => '-r'
     end
 
-    if opts[:slow_given]
-      tracer.watch(opts[:slow])
-    elsif opts[:firehose]
-      tracer.firehose
-    elsif methods = opts[:methods]
-      tracer.add(methods)
-    end
-
-    if out = opts[:output]
-      tracer.out = File.open(out,'w')
-    end
-
-    tracer.prefix = ' ' * opts[:prefix]
-    tracer.show_duration = !opts[:no_duration]
-    tracer.show_time = opts[:start_time]
+    RBTracer.check_msgmnb
+    RBTracer.cleanup_queues
 
     begin
-      STDERR.puts "*** attached to process #{tracer.pid}"
-      tracer.recv_loop
-    rescue Interrupt
-    end
-  ensure
-    if tracer
-      tracer.detach
-    end
-    puts
-    if tracer
-      STDERR.puts "*** detached from process #{tracer.pid}"
+      begin
+        tracer = RBTracer.new(opts[:pid])
+      rescue ArgumentError => e
+        Trollop.die :pid, "invalid (#{e.message})"
+      end
+
+      if opts[:slow_given]
+        tracer.watch(opts[:slow])
+      elsif opts[:firehose]
+        tracer.firehose
+      elsif methods = opts[:methods]
+        tracer.add(methods)
+      end
+
+      if out = opts[:output]
+        tracer.out = File.open(out,'w')
+      end
+
+      tracer.prefix = ' ' * opts[:prefix]
+      tracer.show_duration = !opts[:no_duration]
+      tracer.show_time = opts[:start_time]
+
+      begin
+        STDERR.puts "*** attached to process #{tracer.pid}"
+        tracer.recv_loop
+      rescue Interrupt
+      end
+    ensure
+      if tracer
+        tracer.detach
+        STDERR.puts "*** detached from process #{tracer.pid}"
+      end
     end
   end
 end
+
+RBTracer.run
