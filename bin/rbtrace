@@ -63,8 +63,15 @@ class RBTracer
     if File.exists?(msgmnb = "/proc/sys/kernel/msgmnb")
       curr = File.read(msgmnb).to_i
       max = 1024*1024
+      cmd = "sysctl kernel.msgmnb=#{max}"
+
       if curr < max
-        STDERR.puts "*** run `sudo sysctl kernel.msgmnb=#{max}` to prevent losing events (currently: #{curr} bytes)"
+        if Process.uid == 0
+          STDERR.puts "*** running `#{cmd}` for you to prevent losing events (currently: #{curr} bytes)"
+          system(cmd)
+        else
+          STDERR.puts "*** run `sudo #{cmd}` to prevent losing events (currently: #{curr} bytes)"
+        end
       end
     end
   end
@@ -122,7 +129,7 @@ class RBTracer
     rescue Errno::ESRCH
       raise ArgumentError, 'invalid pid'
     rescue Errno::EPERM
-      raise ArgumentError, 'could not signal process (run as root)'
+      raise ArgumentError, 'could not signal process, are you running as root?'
     end
 
     Process.kill 'URG', @pid
