@@ -148,7 +148,7 @@ class RBTracer
     @nesting = 0
     @last_tracer = nil
     @out = STDOUT
-    @prefix = ' '
+    @prefix = '  '
     @show_time = false
     @show_duration = true
   end
@@ -460,7 +460,7 @@ EOS
 
       opt :prefix,
         "prefix nested method calls with N spaces",
-        :default => 1,
+        :default => 2,
         :short => '-r'
 
       opt :config,
