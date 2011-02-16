@@ -220,6 +220,7 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
           if (!rbtracer.list[i].klass || rbtracer.list[i].klass == klass) {
             if (!rbtracer.list[i].self || rbtracer.list[i].self == self) {
               tracer = &rbtracer.list[i];
+              break;
             }
           }
         }
