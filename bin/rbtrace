@@ -132,7 +132,7 @@ class RBTracer
     @qo = MsgQ.msgget(-pid, 0666)
 
     if @qi == -1 || @qo == -1
-      raise ArgumentError, 'pid is not listening for messages (did you `require "rbtrace"`)'
+      raise ArgumentError, 'pid is not listening for messages, did you `require "rbtrace"`'
     end
 
     @tracers = Hash.new{ |h,k|

@@ -12,7 +12,7 @@ while true
     Dir.chdir("/tmp") do
       Dir.pwd
       Process.pid
-      'hello'.multiply_vowels(3)
+      'hello'.multiply_vowels(3){ :ohai }
       sleep rand*0.5
     end
   }.call

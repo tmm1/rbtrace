@@ -248,24 +248,22 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
           size_t len = strlen(expr);
 
           VALUE val = Qnil;
-          char buffer[len+50];
+          char buffer[len+150];
           char *result = NULL;
 
           if (len == 4 && strcmp("self", expr) == 0) {
             val = rb_inspect(self);
 
           } else if (len == 10 && strcmp("__source__", expr) == 0) {
-            snprintf(buffer, len+50, "\"%s:%d\"", rb_sourcefile(), rb_sourceline());
+            snprintf(buffer, len+150, "\"%s:%d\"", rb_sourcefile(), rb_sourceline());
             result = buffer;
 
           } else if (len > 1 && expr[0] == '@') {
             val = rb_inspect(rb_ivar_get(self, rb_intern(expr)));
 
           } else if (event == RUBY_EVENT_CALL) {
-            snprintf(buffer, len+50, "(begin; %s; rescue Exception => e; e; end).inspect", expr);
-
-            VALUE str = rb_str_new2(buffer);
-            val = rb_obj_instance_eval(1, &str, self);
+            snprintf(buffer, len+150, "(begin; ObjectSpace._id2ref(%p >> 1).instance_eval{ %s }; rescue Exception => e; e; end).inspect", (void*)self, expr);
+            val = rb_eval_string_protect(buffer, 0);
           }
 
           if (RTEST(val) && TYPE(val) == T_STRING) {
