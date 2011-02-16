@@ -373,7 +373,7 @@ class RBTracer
   end
 
   def self.run
-    opts = Trollop.options do
+    parser = Trollop::Parser.new do
       version <<-EOS
 rbtrace: like strace, but for ruby code
   version 0.2.5
@@ -459,6 +459,12 @@ EOS
         "prefix nested method calls with N spaces",
         :default => 1,
         :short => '-r'
+    end
+
+    opts = Trollop.with_standard_exception_handling(parser) do
+      o = parser.parse(ARGV)
+      raise Trollop::HelpNeeded if ARGV.empty?
+      o
     end
 
     RBTracer.check_msgmnb
