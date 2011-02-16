@@ -248,6 +248,10 @@ class RBTracer
 
   def recv_cmd(block=true)
     MsgQ::EventMsg.recv_cmd(@qi, block)
+  rescue Errno::EINTR
+    # on linux, an incoming signal will interrupt msgrcv()
+    # regardless of what SA_RESTART is set to
+    retry
   end
 
   def print(*args)
