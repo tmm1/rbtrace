@@ -178,7 +178,7 @@ class RBTracer
     Array(methods).each do |func|
       func = func.strip
 
-      if func =~ /^(.+)\((.+?)\)$/
+      if func =~ /^(.+)\((.+)\)$/
         func, args = $1, $2
         args = args.split(',').map{ |a| a.strip }
       end
@@ -373,6 +373,9 @@ class RBTracer
   end
 
   def self.run
+    check_msgmnb
+    cleanup_queues
+
     parser = Trollop::Parser.new do
       version <<-EOS
 rbtrace: like strace, but for ruby code
@@ -459,29 +462,61 @@ EOS
         "prefix nested method calls with N spaces",
         :default => 1,
         :short => '-r'
+
+      opt :config,
+        "config file",
+        :type => String,
+        :short => '-c'
     end
 
     opts = Trollop.with_standard_exception_handling(parser) do
-      o = parser.parse(ARGV)
       raise Trollop::HelpNeeded if ARGV.empty?
-      o
+      parser.parse(ARGV)
     end
 
-    RBTracer.check_msgmnb
-    RBTracer.cleanup_queues
+    slow = nil
+    firehose = nil
+    methods = nil
+
+    if opts[:slow_given]
+      slow = opts[:slow]
+
+    elsif opts[:firehose]
+      firehose = true
+
+    elsif opts[:methods]
+      methods = opts[:methods]
+
+    elsif opts[:config_given]
+      if File.exists?(config = opts[:config])
+        methods = []
+        File.readlines(config).each do |line|
+          next if line =~ /^#/
+          methods << line.strip
+        end
+
+      else
+        parser.die :config, "invalid config file"
+      end
+
+    else
+      $stderr.puts "Error: --slow, --firehose, --methods or --config required."
+      $stderr.puts "Try --help for help."
+      exit(-1)
+    end
 
     begin
       begin
         tracer = RBTracer.new(opts[:pid])
       rescue ArgumentError => e
-        Trollop.die :pid, "invalid (#{e.message})"
+        parser.die :pid, "invalid (#{e.message})"
       end
 
-      if opts[:slow_given]
-        tracer.watch(opts[:slow])
-      elsif opts[:firehose]
+      if slow
+        tracer.watch(slow)
+      elsif firehose
         tracer.firehose
-      elsif methods = opts[:methods]
+      elsif methods
         tracer.add(methods)
       end
 

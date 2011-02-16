@@ -157,7 +157,6 @@ rbtrace works on ruby 1.8 and 1.9, running on linux or mac osx.
 * switch ipc to [msgpack](https://github.com/dhotson/msgpack/tree/master/c) instead of csv
 * add triggers to start tracing slow methods only inside another method
 * optimize local variable lookup to avoid instance_eval
-* let bin/rbtrace read methods selectors and expressions from a config file
 * use shared memory region for symbol table to avoid lookup on every event
 * use another shm for class name lookup, and wipe on every GC
 * investigate mach_msg on osx since msgget(2) has hard kernel limits
