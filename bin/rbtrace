@@ -152,10 +152,12 @@ class RBTracer
         :arglist => false
       }
     }
-    @nesting = 0
+    @max_nesting = @nesting = 0
     @last_tracer = nil
+
     @out = STDOUT
     @prefix = '  '
+
     @show_time = false
     @show_duration = true
   end
@@ -333,6 +335,7 @@ class RBTracer
       print name
 
       @nesting += 1
+      @max_nesting = @nesting if @nesting > @max_nesting
       @last_tracer = tracer
       tracer[:last] = name
 
@@ -353,7 +356,12 @@ class RBTracer
           print name
         end
         print ' <%f>' % (diff/1_000_000.0) if @show_duration
-        puts if @nesting == 0 and (tracer != @last_tracer || @last_tracer[:last] != name)
+
+        if @nesting == 0 and @max_nesting > 1
+          # unless tracer == @last_tracer and @last_tracer[:last] == name
+            puts
+          # end
+        end
       end
 
       tracer[:arglist] = false
