@@ -71,6 +71,8 @@ struct event_msg {
 
 
 static struct {
+  pid_t attached_pid;
+
   bool installed;
 
   bool firehose;
@@ -89,6 +91,8 @@ static struct {
   int mqi_id;
 }
 rbtracer = {
+  .attached_pid = 0,
+
   .installed = false,
 
   .firehose = false,
@@ -110,7 +114,7 @@ rbtracer = {
   if (false) {\
     fprintf(stderr, "%" PRIu64 "," format, usec, __VA_ARGS__);\
     fprintf(stderr, "\n");\
-  } else if (rbtracer.mqo_id != -1) {\
+  } else if (rbtracer.mqo_id != -1 && rbtracer.attached_pid) {\
     struct event_msg msg;\
     int ret = -1, n = 0;\
     \
@@ -119,8 +123,9 @@ rbtracer = {
     \
     for (n=0; n<10 && ret==-1; n++)\
       ret = msgsnd(rbtracer.mqo_id, &msg, sizeof(msg)-sizeof(long), IPC_NOWAIT);\
-    if (ret == -1) {\
-      fprintf(stderr, "msgsnd(): %s\n", strerror(errno));\
+    \
+    if (ret == -1 && rbtracer.mqo_id != -1 && errno != EINVAL) {\
+      fprintf(stderr, "msgsnd(%d): %s\n", rbtracer.mqo_id, strerror(errno));\
       struct msqid_ds stat;\
       msgctl(rbtracer.mqo_id, IPC_STAT, &stat);\
       fprintf(stderr, "cbytes: %lu, qbytes: %lu, qnum: %lu\n", stat.msg_cbytes, stat.msg_qbytes, stat.msg_qnum);\
@@ -625,7 +630,27 @@ sigurg(int signal)
       } else if (0 == strncmp("unwatch", msg.buf, 7)) {
         rbtracer_unwatch();
 
+      } else if (0 == strncmp("attach,", msg.buf, 7)) {
+        pid_t pid = 0;
+
+        query = msg.buf + 7;
+        if (query && *query)
+          pid = (pid_t)atoi(query);
+
+        if (pid && rbtracer.attached_pid == 0)
+          rbtracer.attached_pid = pid;
+
+        SEND_EVENT(
+          "attached,%u",
+          rbtracer.attached_pid
+        );
+
       } else if (0 == strncmp("detach", msg.buf, 6)) {
+        SEND_EVENT(
+          "detached,%u",
+          rbtracer.attached_pid
+        );
+        rbtracer.attached_pid = 0;
         rbtracer_remove_all();
 
       }

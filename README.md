@@ -155,7 +155,6 @@ rbtrace works on ruby 1.8 and 1.9, running on linux or mac osx.
 ## todo
 
 * switch ipc to [msgpack](https://github.com/dhotson/msgpack/tree/master/c) instead of csv
-* only allow one tracer to attach at a time
 * add triggers to start tracing slow methods only inside another method
 * syntax check expressions before adding them
 * add special expressions for method args (_arg0_, _arguments_)

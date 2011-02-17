@@ -160,6 +160,8 @@ class RBTracer
 
     @show_time = false
     @show_duration = true
+
+    attach
   end
 
   # Watch for method calls slower than a threshold.
@@ -201,6 +203,18 @@ class RBTracer
     end
   end
 
+  # Attach to the process.
+  #
+  # Returns nothing.
+  def attach
+    send_cmd("attach,#{Process.pid}")
+    if wait_for{ @attached == true }
+      STDERR.puts "*** attached to process #{pid}"
+    else
+      raise ArgumentError, 'process already being traced?'
+    end
+  end
+
   # Detach from the traced process.
   #
   # Returns nothing.
@@ -212,13 +226,16 @@ class RBTracer
 
     puts
 
-    # drain queue
-    5.times do
-      begin
-        true while recv_cmd(false)
-      rescue
-      end
+    if wait_for{ @attached == false }
+      puts
+      STDERR.puts "*** detached from process #{pid}"
+    else
+      puts
+      STDERR.puts "*** could not detach cleanly from process #{pid}"
     end
+  rescue Errno::EINVAL, Errno::EIDRM
+    puts
+    STDERR.puts "*** process #{pid} is gone"
   end
 
   # Process events from the traced process.
@@ -227,26 +244,62 @@ class RBTracer
   def recv_loop
     while true
       # block until a message arrives
-      lines = [recv_cmd]
+      process_line(recv_cmd)
 
-      # check to see if there are more messages and pull them off
-      # so the queue doesn't fill up in kernel land
-      25.times do
-        break unless line = recv_cmd(false)
-        lines << line
-      end
+      # process any remaining messages
+      recv_lines
+    end
+  rescue Errno::EINVAL, Errno::EIDRM
+    # process went away
+  end
 
-      lines.each do |line|
-        process_line(line)
-      end
+  # Process events from the traced process, without blocking if
+  # there is nothing to do. This is a useful way to drain the buffer
+  # so messages do not accumulate in kernel land.
+  #
+  # Returns nothing.
+  def recv_lines
+    50.times do
+      break unless line = recv_cmd(false)
+      process_line(line)
     end
   end
 
   private
 
+  # Process incoming events until either a timeout or a condition becomes true.
+  #
+  # time - The Fixnum timeout in seconds.
+  # block - The Block that is checked every 50ms until it returns true.
+  #
+  # Returns true when the condition was met, or false on a timeout.
+  def wait_for(time=5)
+    wait = 0.05 # polling interval
+
+    (time/wait).to_i.times do
+      begin
+        recv_lines
+        sleep(wait)
+        time -= wait
+
+        return true if yield
+      rescue Interrupt
+        STDERR.puts "*** waiting to detach cleanly (#{time.to_i}s left)"
+        retry
+      end
+    end
+
+    false
+  end
+
   def send_cmd(msg)
-    MsgQ::EventMsg.send_cmd(@qo, msg)
+    begin
+      MsgQ::EventMsg.send_cmd(@qo, msg)
+    rescue Errno::EINTR
+      retry
+    end
     Process.kill 'URG', @pid
+    recv_lines
   end
 
   def recv_cmd(block=true)
@@ -269,6 +322,26 @@ class RBTracer
     time, event, id, *args = line.strip.split(',')
     time = time.to_i
     id = id.to_i
+
+    case event
+    when 'attached'
+      @attached = true
+      if id != Process.pid
+        STDERR.puts "*** process #{pid} is already being traced"
+        exit!(-1)
+      end
+      return
+
+    when 'detached'
+      @attached = false
+      return
+    end
+
+    if !@attached
+      STDERR.puts "*** got #{event} before attaching"
+      return
+    end
+
     tracer = @tracers[id] if id > -1
 
     case event
@@ -544,7 +617,7 @@ EOS
       begin
         tracer = RBTracer.new(opts[:pid])
       rescue ArgumentError => e
-        parser.die :pid, "invalid (#{e.message})"
+        parser.die :pid, "(#{e.message})"
       end
 
       if slow
@@ -564,14 +637,12 @@ EOS
       tracer.show_time = opts[:start_time]
 
       begin
-        STDERR.puts "*** attached to process #{tracer.pid}"
         tracer.recv_loop
       rescue Interrupt
       end
     ensure
       if tracer
         tracer.detach
-        STDERR.puts "*** detached from process #{tracer.pid}"
       end
     end
   end
