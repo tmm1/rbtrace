@@ -616,15 +616,6 @@ sigurg(int signal)
   event_msg_t msg;
   int n = 0;
 
-  char query[sizeof(msg.buf)];
-  const char *type = NULL;
-  size_t len = 0;
-
-  bool success = false;
-  msgpack_unpacked unpacked;
-  msgpack_unpacked_init(&unpacked);
-  msgpack_object cmd;
-
   while (true) {
     int ret = -1;
 
@@ -634,24 +625,35 @@ sigurg(int signal)
     if (ret == -1) {
       break;
     } else {
-      success = msgpack_unpack_next(&unpacked, msg.buf, sizeof(msg.buf), NULL);
+      char query[sizeof(msg.buf)];
+
+      msgpack_object cmd;
+      msgpack_object_array ary;
+      msgpack_object_raw str;
+
+      msgpack_unpacked unpacked;
+      msgpack_unpacked_init(&unpacked);
+
+      bool success = msgpack_unpack_next(&unpacked, msg.buf, sizeof(msg.buf), NULL);
       cmd = unpacked.data;
 
-      if (!success ||
-          cmd.type != MSGPACK_OBJECT_ARRAY ||
-          cmd.via.array.size < 1 ||
-          cmd.via.array.ptr[0].type != MSGPACK_OBJECT_RAW)
+      if (!success || cmd.type != MSGPACK_OBJECT_ARRAY)
         continue;
 
-      type = cmd.via.array.ptr[0].via.raw.ptr;
-      len  = cmd.via.array.ptr[0].via.raw.size;
+      ary = cmd.via.array;
 
-      if (0 == strncmp("attach", type, len)) {
-        if (cmd.via.array.size != 2 ||
-            cmd.via.array.ptr[1].type != MSGPACK_OBJECT_POSITIVE_INTEGER)
+      if (ary.size < 1 ||
+          ary.ptr[0].type != MSGPACK_OBJECT_RAW)
+        continue;
+
+      str = ary.ptr[0].via.raw;
+
+      if (0 == strncmp("attach", str.ptr, str.size)) {
+        if (ary.size != 2 ||
+            ary.ptr[1].type != MSGPACK_OBJECT_POSITIVE_INTEGER)
           continue;
 
-        pid_t pid = (pid_t) cmd.via.array.ptr[1].via.u64;
+        pid_t pid = (pid_t) ary.ptr[1].via.u64;
 
         if (pid && rbtracer.attached_pid == 0)
           rbtracer.attached_pid = pid;
@@ -661,7 +663,7 @@ sigurg(int signal)
           rbtracer.attached_pid
         );
 
-      } else if (0 == strncmp("detach", type, len)) {
+      } else if (0 == strncmp("detach", str.ptr, str.size)) {
         SEND_EVENT(
           "detached,%u",
           rbtracer.attached_pid
@@ -669,34 +671,38 @@ sigurg(int signal)
         rbtracer.attached_pid = 0;
         rbtracer_remove_all();
 
-      } else if (0 == strncmp("watch", type, len)) {
-        if (cmd.via.array.size != 2 ||
-            cmd.via.array.ptr[1].type != MSGPACK_OBJECT_POSITIVE_INTEGER)
+      } else if (0 == strncmp("watch", str.ptr, str.size)) {
+        if (ary.size != 2 ||
+            ary.ptr[1].type != MSGPACK_OBJECT_POSITIVE_INTEGER)
           continue;
 
-        unsigned int msec = cmd.via.array.ptr[1].via.u64;
+        unsigned int msec = ary.ptr[1].via.u64;
         rbtracer_watch(msec);
 
-      } else if (0 == strncmp("firehose", type, len)) {
+      } else if (0 == strncmp("firehose", str.ptr, str.size)) {
         rbtracer.firehose = true;
         event_hook_install();
 
-      } else if (0 == strncmp("add", type, len)) {
-        if (cmd.via.array.size != 2 ||
-            cmd.via.array.ptr[1].type != MSGPACK_OBJECT_RAW)
+      } else if (0 == strncmp("add", str.ptr, str.size)) {
+        if (ary.size != 2 ||
+            ary.ptr[1].type != MSGPACK_OBJECT_RAW)
           continue;
 
-        strncpy(query, cmd.via.array.ptr[1].via.raw.ptr, cmd.via.array.ptr[1].via.raw.size);
-        query[cmd.via.array.ptr[1].via.raw.size] = 0;
+        str = ary.ptr[1].via.raw;
+
+        strncpy(query, str.ptr, str.size);
+        query[str.size] = 0;
         last_tracer_id = rbtracer_add(query);
 
-      } else if (0 == strncmp("addexpr", type, len)) {
-        if (cmd.via.array.size != 2 ||
-            cmd.via.array.ptr[1].type != MSGPACK_OBJECT_RAW)
+      } else if (0 == strncmp("addexpr", str.ptr, str.size)) {
+        if (ary.size != 2 ||
+            ary.ptr[1].type != MSGPACK_OBJECT_RAW)
           continue;
 
-        strncpy(query, cmd.via.array.ptr[1].via.raw.ptr, cmd.via.array.ptr[1].via.raw.size);
-        query[cmd.via.array.ptr[1].via.raw.size] = 0;
+        str = ary.ptr[1].via.raw;
+
+        strncpy(query, str.ptr, str.size);
+        query[str.size] = 0;
         rbtracer_add_expr(last_tracer_id, query);
 
       }
