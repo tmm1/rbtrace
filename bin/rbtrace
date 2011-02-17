@@ -184,6 +184,7 @@ class RBTracer
   def add(methods)
     Array(methods).each do |func|
       func = func.strip
+      next if func.empty?
 
       if func =~ /^(.+)\((.+)\)$/
         func, args = $1, $2
@@ -417,6 +418,8 @@ Tracers:
   rbtrace --slow=250       # trace method calls slower than 250ms
   rbtrace --methods a b c  # trace calls to given methods
 
+  rbtrace -c my.tracer     # trace all methods listed in my.tracer
+
 Method Selectors:
 
   sleep                    # any instance or class method named sleep
@@ -477,7 +480,7 @@ EOS
 
       opt :config,
         "config file",
-        :type => String,
+        :type => :strings,
         :short => '-c'
     end
 
@@ -500,15 +503,25 @@ EOS
       methods = opts[:methods]
 
     elsif opts[:config_given]
-      if File.exists?(config = opts[:config])
-        methods = []
-        File.readlines(config).each do |line|
-          next if line =~ /^#/
-          methods << line.strip
+      methods = []
+
+      Array(opts[:config]).each do |config|
+        file = [
+          config,
+          File.expand_path("../../tracers/#{config}.tracer",__FILE__)
+        ].find{ |f| File.exists?(f) }
+
+        unless file
+          parser.die :config, '(file does not exist)'
         end
 
-      else
-        parser.die :config, "invalid config file"
+        File.readlines(file).each do |line|
+          line.strip!
+          next if line =~ /^#/
+          next if line.empty?
+
+          methods << line
+        end
       end
 
     else
