@@ -155,9 +155,17 @@ rbtrace works on ruby 1.8 and 1.9, running on linux or mac osx.
 ## todo
 
 * switch ipc to [msgpack](https://github.com/dhotson/msgpack/tree/master/c) instead of csv
+* only allow one tracer to attach at a time
 * add triggers to start tracing slow methods only inside another method
+* syntax check expressions before adding them
+* add special expressions for method args (_arg0_, _arguments_)
 * optimize local variable lookup to avoid instance_eval
-* use shared memory region for symbol table to avoid lookup on every event
-* use another shm for class name lookup, and wipe on every GC
+* maintain a mid table, and send events when new entries are added
+* use another table for class name lookup, but wipe on GC
+* run process via bin/rbtrace (to trace rubygems and bootup time)
+* add --append --output mode to bin/trace
+* let bin/rbtrace attach to multiple pids
+  * how to select on multiple msgrcv() targets?
+  * prefix pid to output in multiple pid mode
 * investigate mach_msg on osx since msgget(2) has hard kernel limits
 
