@@ -144,7 +144,7 @@ class RBTracer
 
     @tracers = Hash.new{ |h,k|
       h[k] = {
-        :name => nil,
+        :query => nil,
         :times => [],
         :names => [],
         :exprs => {},
@@ -349,9 +349,9 @@ class RBTracer
       if id == -1
         puts line
       else
-        name = args.first
+        query = args.first
         @tracers.delete(id)
-        @tracers[id][:name] = name
+        @tracers[id][:query] = query
       end
 
     when 'remove'
