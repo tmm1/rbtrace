@@ -26,10 +26,10 @@ Dir.chdir('src') do
   end
 end
 
-$LIBPATH.unshift "#{CWD}/dst/lib"
+FileUtils.cp "#{CWD}/dst/lib/libmsgpackc.a", "#{CWD}/libmsgpackc_ext.a"
 $INCFLAGS[0,0] = "-I#{CWD}/dst/include "
 
-unless have_library('msgpackc') and have_header('msgpack.h')
+unless have_library('msgpackc_ext') and have_header('msgpack.h')
   raise 'msgpack build failed'
 end
 
