@@ -294,7 +294,8 @@ class RBTracer
       end
 
     when 'exprval'
-      expr_id, val = *args
+      expr_id = args.shift
+      val = args.join(',')
       expr_id = expr_id.to_i
       expr = tracer[:exprs][expr_id]
 
