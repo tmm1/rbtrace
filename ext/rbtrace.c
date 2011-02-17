@@ -20,9 +20,11 @@
 #include <env.h>
 #include <intern.h>
 #include <node.h>
+#include <st.h>
 #define rb_sourcefile() (ruby_current_node ? ruby_current_node->nd_file : 0)
 #define rb_sourceline() (ruby_current_node ? nd_line(ruby_current_node) : 0)
 #else
+#include <ruby/st.h>
 // this is a nasty hack, and will probably break on anything except 1.9.2p136
 int rb_thread_method_id_and_class(void *th, ID *idp, VALUE *klassp);
 RUBY_EXTERN void *ruby_current_thread;
@@ -63,14 +65,15 @@ struct rbtracer_t {
 };
 typedef struct rbtracer_t rbtracer_t;
 
-
 struct event_msg {
   long mtype;
   char buf[BUF_SIZE];
 };
 
-
 static struct {
+  st_table *mid_tbl;
+  st_table *klass_tbl;
+
   pid_t attached_pid;
 
   bool installed;
@@ -91,6 +94,9 @@ static struct {
   int mqi_id;
 }
 rbtracer = {
+  .mid_tbl = NULL,
+  .klass_tbl = NULL,
+
   .attached_pid = 0,
 
   .installed = false,
@@ -132,6 +138,34 @@ rbtracer = {
     }\
   }\
 } while (0)
+
+static inline void
+SEND_NAMES(ID mid, VALUE klass)
+{
+  if (!rbtracer.mid_tbl)
+    rbtracer.mid_tbl = st_init_numtable();
+
+  if (!st_is_member(rbtracer.mid_tbl, mid)) {
+    st_insert(rbtracer.mid_tbl, (st_data_t)mid, (st_data_t)1);
+    SEND_EVENT(
+      "mid,%lu,%s",
+      mid,
+      rb_id2name(mid)
+    );
+  }
+
+  if (!rbtracer.klass_tbl)
+    rbtracer.klass_tbl = st_init_numtable();
+
+  if (!st_is_member(rbtracer.klass_tbl, klass)) {
+    st_insert(rbtracer.klass_tbl, (st_data_t)klass, (st_data_t)1);
+    SEND_EVENT(
+      "klass,%p,%s",
+      (void*)klass,
+      rb_class2name(klass)
+    );
+  }
+}
 
 static void
 #ifdef RUBY_VM
@@ -196,14 +230,15 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
     }
 
     if (diff > rbtracer.threshold * 1e3) {
+      SEND_NAMES(mid, singleton ? self : klass);
       SEND_EVENT(
-        "%s,-1,%" PRIu64 ",%d,%s,%d,%s",
+        "%s,-1,%" PRIu64 ",%d,%lu,%d,%p",
         event == RUBY_EVENT_RETURN ? "slow" : "cslow",
         diff,
         rbtracer.num_calls,
-        rb_id2name(mid),
+        mid,
         singleton,
-        klass ? rb_class2name(singleton ? self : klass) : ""
+        (void*)(singleton ? self : klass)
       );
     }
 
@@ -239,13 +274,14 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
   switch (event) {
     case RUBY_EVENT_CALL:
     case RUBY_EVENT_C_CALL:
+      SEND_NAMES(mid, singleton ? self : klass);
       SEND_EVENT(
-        "%s,%d,%s,%d,%s",
+        "%s,%d,%lu,%d,%p",
         event == RUBY_EVENT_CALL ? "call" : "ccall",
         tracer ? tracer->id : 255, // hax
-        rb_id2name(mid),
+        mid,
         singleton,
-        klass ? rb_class2name(singleton ? self : klass) : ""
+        (void*)(singleton ? self : klass)
       );
 
       if (tracer && tracer->num_exprs) {
@@ -390,6 +426,14 @@ rbtracer_remove_all()
       rbtracer_remove(NULL, i);
     }
   }
+
+  if (rbtracer.mid_tbl)
+    st_free_table(rbtracer.mid_tbl);
+  rbtracer.mid_tbl = NULL;
+
+  if (rbtracer.klass_tbl)
+    st_free_table(rbtracer.klass_tbl);
+  rbtracer.klass_tbl = NULL;
 }
 
 static int

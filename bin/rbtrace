@@ -142,6 +142,8 @@ class RBTracer
       raise ArgumentError, 'pid is not listening for messages, did you `require "rbtrace"`'
     end
 
+    @klasses = {}
+    @methods = {}
     @tracers = Hash.new{ |h,k|
       h[k] = {
         :query => nil,
@@ -319,9 +321,9 @@ class RBTracer
   end
 
   def process_line(line)
-    time, event, id, *args = line.strip.split(',')
+    time, event, _id, *args = line.strip.split(',')
     time = time.to_i
-    id = id.to_i
+    id = _id.to_i
 
     case event
     when 'attached'
@@ -345,6 +347,12 @@ class RBTracer
     tracer = @tracers[id] if id > -1
 
     case event
+    when 'mid'
+      @methods[id.to_i] = args.first
+
+    when 'klass'
+      @klasses[_id.to_i(16)] = args.first
+
     when 'add'
       if id == -1
         puts line
@@ -388,8 +396,9 @@ class RBTracer
     when 'call','ccall'
       method, is_singleton, klass = *args
       is_singleton = (is_singleton == '1')
+      klass = @klasses[klass.to_i(16)]
       name = klass ? "#{klass}#{ is_singleton ? '.' : '#' }" : ''
-      name += method
+      name += @methods[method.to_i] || '(unknown)'
 
       tracer[:times] << time
       tracer[:names] << name
@@ -445,8 +454,9 @@ class RBTracer
       diff = diff.to_i
 
       is_singleton = (is_singleton == '1')
+      klass = @klasses[klass.to_i(16)]
       name = klass ? "#{klass}#{ is_singleton ? '.' : '#' }" : ''
-      name += method
+      name += @methods[method.to_i] || '(unknown)'
 
       print @prefix*nesting if nesting > 0
       print name

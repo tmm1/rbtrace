@@ -159,8 +159,6 @@ rbtrace works on ruby 1.8 and 1.9, running on linux or mac osx.
 * syntax check expressions before adding them
 * add special expressions for method args (_arg0_, _arguments_)
 * optimize local variable lookup to avoid instance_eval
-* maintain a mid table, and send events when new entries are added
-* use another table for class name lookup, but wipe on GC
 * run process via bin/rbtrace (to trace rubygems and bootup time)
 * add --append --output mode to bin/trace
 * let bin/rbtrace attach to multiple pids
