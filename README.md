@@ -160,7 +160,6 @@ rbtrace works on ruby 1.8 and 1.9, running on linux or mac osx.
 * add special expressions for method args (_arg0_, _arguments_)
 * optimize local variable lookup to avoid instance_eval
 * run process via bin/rbtrace (to trace rubygems and bootup time)
-* add --append --output mode to bin/trace
 * let bin/rbtrace attach to multiple pids
   * how to select on multiple msgrcv() targets?
   * prefix pid to output in multiple pid mode

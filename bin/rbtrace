@@ -566,6 +566,10 @@ EOS
         :type => String,
         :short => '-o'
 
+      opt :append,
+        "append to output file instead of overwriting",
+        :short => '-a'
+
       opt :prefix,
         "prefix nested method calls with N spaces",
         :default => 2,
@@ -580,6 +584,10 @@ EOS
     opts = Trollop.with_standard_exception_handling(parser) do
       raise Trollop::HelpNeeded if ARGV.empty?
       parser.parse(ARGV)
+    end
+
+    if out = opts[:output]
+      file = File.open(out, opts[:append] ? 'a+' : 'w')
     end
 
     slow = nil
@@ -638,8 +646,8 @@ EOS
         tracer.add(methods)
       end
 
-      if out = opts[:output]
-        tracer.out = File.open(out,'w')
+      if file
+        tracer.out = file
       end
 
       tracer.prefix = ' ' * opts[:prefix]
