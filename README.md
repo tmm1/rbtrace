@@ -119,7 +119,7 @@ rbtrace works on ruby 1.8 and 1.9, running on linux or mac osx.
 
 ### get values of variables and other expressions
 
-    % rbtrace -p 87854 -m "String#gsub(self)" "String#*(self)" "String#multiply_vowels(self, self.length, num)"
+    % rbtrace -p 87854 -m "String#gsub(self, @test)" "String#*(self)" "String#multiply_vowels(self, self.length, num)"
     *** attached to process 87854
 
     String#multiply_vowels(self="hello", self.length=5, num=3)

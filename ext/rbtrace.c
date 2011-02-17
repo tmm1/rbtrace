@@ -262,7 +262,7 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
           } else if (len > 2 && expr[0] == '@' && expr[1] != '@') {
             val = rb_inspect(rb_ivar_get(self, rb_intern(expr)));
 
-          } else if (event == RUBY_EVENT_CALL) {
+          } else {
             snprintf(buffer, len+150, "(begin; ObjectSpace._id2ref(%p >> 1).instance_eval{ %s }; rescue Exception => e; e; end).inspect", (void*)self, expr);
             val = rb_eval_string_protect(buffer, 0);
           }
