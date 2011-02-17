@@ -418,6 +418,8 @@ Tracers:
   rbtrace --slow=250       # trace method calls slower than 250ms
   rbtrace --methods a b c  # trace calls to given methods
 
+  rbtrace -c io            # trace common input/output functions
+  rbtrace -c eventmachine  # trace common eventmachine functions
   rbtrace -c my.tracer     # trace all methods listed in my.tracer
 
 Method Selectors:

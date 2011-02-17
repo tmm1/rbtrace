@@ -1,0 +1,27 @@
+# incoming events
+post_init(@signature)
+connection_completed(@signature)
+receive_data(@signature)
+unbind(@signature)
+
+# connection methods
+EM::Connection#send_data(@signature, data.size, data[0..5])
+EM::Connection#send_datagram(@signature, data.size, data[0..5])
+EM::Connection#start_tls(@signature, args)
+EM::Connection#close_connection(@signature, after_writing)
+EM::Connection#proxy_incoming_to(@signature, conn, bufsize)
+EM::Connection#(@signature)
+
+# timers
+EM.add_periodic_timer(args, block)
+EM.add_timer(args, block)
+EM.cancel_timer(timer_or_sig,@timers.size)
+
+# event loop
+EM.stop
+
+# connections
+EM.start_server(server, port, handler)
+EM.stop_server
+EM.connect(server, port, handler)
+EM.reconnect(server, port, handler)
