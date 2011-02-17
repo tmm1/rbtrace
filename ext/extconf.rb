@@ -1,4 +1,37 @@
+CWD = File.expand_path('../', __FILE__)
+
+def sys(cmd)
+  puts "  -- #{cmd}"
+  unless ret = xsystem(cmd)
+    raise "#{cmd} failed, please report to https://github.com/tmm1/rbtrace/issues"
+  end
+  ret
+end
+
 require 'mkmf'
+require 'fileutils'
+
+Logging.message "Building msgpack\n"
+
+msgpack = File.basename('msgpack-0.5.4.tar.gz')
+dir = File.basename(msgpack, '.tar.gz')
+
+Dir.chdir('src') do
+  FileUtils.rm_rf(dir) if File.exists?(dir)
+
+  sys("tar zxvf #{msgpack}")
+  Dir.chdir(dir) do
+    sys("./configure --disable-shared --prefix=#{CWD}/dst/")
+    sys("make install")
+  end
+end
+
+$LIBPATH.unshift "#{CWD}/dst/lib"
+$INCFLAGS[0,0] = "-I#{CWD}/dst/include "
+
+unless have_library('msgpackc') and have_header('msgpack.h')
+  raise 'msgpack build failed'
+end
 
 # increase message size on linux
 if RUBY_PLATFORM =~ /linux/
