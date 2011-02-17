@@ -173,14 +173,14 @@ class RBTracer
   #
   # Returns nothing.
   def watch(msec)
-    send_cmd("watch,#{msec}")
+    send_cmd(:watch, msec)
   end
 
   # Turn on the firehose (show all method calls).
   #
   # Returns nothing.
   def firehose
-    send_cmd('firehose')
+    send_cmd(:firehose)
   end
 
   # Add tracers for the given list of methods.
@@ -198,10 +198,10 @@ class RBTracer
         args = args.split(',').map{ |a| a.strip }
       end
 
-      send_cmd("add,#{func}")
+      send_cmd(:add, func)
 
       args.each do |arg|
-        send_cmd("addexpr,#{arg}")
+        send_cmd(:addexpr, arg)
       end if args and args.any?
     end
   end
@@ -210,7 +210,7 @@ class RBTracer
   #
   # Returns nothing.
   def attach
-    send_cmd("attach,#{Process.pid}")
+    send_cmd(:attach, Process.pid)
     if wait_for{ @attached == true }
       STDERR.puts "*** attached to process #{pid}"
     else
@@ -223,7 +223,7 @@ class RBTracer
   # Returns nothing.
   def detach
     begin
-      send_cmd('detach')
+      send_cmd(:detach)
     rescue Errno::ESRCH
     end
 
@@ -295,9 +295,9 @@ class RBTracer
     false
   end
 
-  def send_cmd(msg)
+  def send_cmd(*cmd)
     begin
-      MsgQ::EventMsg.send_cmd(@qo, msg)
+      MsgQ::EventMsg.send_cmd(@qo, cmd.to_msgpack)
     rescue Errno::EINTR
       retry
     end

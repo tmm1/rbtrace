@@ -14,6 +14,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include <msgpack.h>
 #include <ruby.h>
 
 #ifndef RUBY_VM
@@ -108,6 +109,7 @@ rbtracer = {
   .threshold = 250,
 
   .num = 0,
+  .list = {},
 
   .mqo_key = 0,
   .mqi_key = 0,
@@ -613,9 +615,16 @@ sigurg(int signal)
   if (rbtracer.mqi_id == -1) return;
 
   struct event_msg msg;
-  char *query = NULL;
-  size_t len = 0;
   int n = 0;
+
+  char query[sizeof(msg.buf)];
+  const char *type = NULL;
+  size_t len = 0;
+
+  bool success = false;
+  msgpack_unpacked unpacked;
+  msgpack_unpacked_init(&unpacked);
+  msgpack_object cmd;
 
   while (true) {
     int ret = -1;
@@ -626,44 +635,24 @@ sigurg(int signal)
     if (ret == -1) {
       break;
     } else {
-      len = strlen(msg.buf);
-      if (msg.buf[len-1] == '\n')
-        msg.buf[len-1] = 0;
+      success = msgpack_unpack_next(&unpacked, msg.buf, sizeof(msg.buf), NULL);
+      cmd = unpacked.data;
 
-      if (0 == strncmp("add,", msg.buf, 4)) {
-        query = msg.buf + 4;
-        last_tracer_id = rbtracer_add(query);
+      if (!success ||
+          cmd.type != MSGPACK_OBJECT_ARRAY ||
+          cmd.via.array.size < 1 ||
+          cmd.via.array.ptr[0].type != MSGPACK_OBJECT_RAW)
+        continue;
 
-      } else if (0 == strncmp("del,", msg.buf, 4)) {
-        query = msg.buf + 4;
-        rbtracer_remove(query, -1);
+      type = cmd.via.array.ptr[0].via.raw.ptr;
+      len  = cmd.via.array.ptr[0].via.raw.size;
 
-      } else if (0 == strncmp("firehose", msg.buf, 8)) {
-        rbtracer.firehose = true;
-        event_hook_install();
+      if (0 == strncmp("attach", type, len)) {
+        if (cmd.via.array.size != 2 ||
+            cmd.via.array.ptr[1].type != MSGPACK_OBJECT_POSITIVE_INTEGER)
+          continue;
 
-      } else if (0 == strncmp("addexpr,", msg.buf, 8)) {
-        query = msg.buf + 8;
-        rbtracer_add_expr(last_tracer_id, query);
-
-      } else if (0 == strncmp("watch,", msg.buf, 6)) {
-        int msec = 250;
-
-        query = msg.buf + 6;
-        if (query && *query)
-          msec = atoi(query);
-
-        rbtracer_watch(msec);
-
-      } else if (0 == strncmp("unwatch", msg.buf, 7)) {
-        rbtracer_unwatch();
-
-      } else if (0 == strncmp("attach,", msg.buf, 7)) {
-        pid_t pid = 0;
-
-        query = msg.buf + 7;
-        if (query && *query)
-          pid = (pid_t)atoi(query);
+        pid_t pid = (pid_t) cmd.via.array.ptr[1].via.u64;
 
         if (pid && rbtracer.attached_pid == 0)
           rbtracer.attached_pid = pid;
@@ -673,13 +662,43 @@ sigurg(int signal)
           rbtracer.attached_pid
         );
 
-      } else if (0 == strncmp("detach", msg.buf, 6)) {
+      } else if (0 == strncmp("detach", type, len)) {
         SEND_EVENT(
           "detached,%u",
           rbtracer.attached_pid
         );
         rbtracer.attached_pid = 0;
         rbtracer_remove_all();
+
+      } else if (0 == strncmp("watch", type, len)) {
+        if (cmd.via.array.size != 2 ||
+            cmd.via.array.ptr[1].type != MSGPACK_OBJECT_POSITIVE_INTEGER)
+          continue;
+
+        unsigned int msec = cmd.via.array.ptr[1].via.u64;
+        rbtracer_watch(msec);
+
+      } else if (0 == strncmp("firehose", type, len)) {
+        rbtracer.firehose = true;
+        event_hook_install();
+
+      } else if (0 == strncmp("add", type, len)) {
+        if (cmd.via.array.size != 2 ||
+            cmd.via.array.ptr[1].type != MSGPACK_OBJECT_RAW)
+          continue;
+
+        strncpy(query, cmd.via.array.ptr[1].via.raw.ptr, cmd.via.array.ptr[1].via.raw.size);
+        query[cmd.via.array.ptr[1].via.raw.size] = 0;
+        last_tracer_id = rbtracer_add(query);
+
+      } else if (0 == strncmp("addexpr", type, len)) {
+        if (cmd.via.array.size != 2 ||
+            cmd.via.array.ptr[1].type != MSGPACK_OBJECT_RAW)
+          continue;
+
+        strncpy(query, cmd.via.array.ptr[1].via.raw.ptr, cmd.via.array.ptr[1].via.raw.size);
+        query[cmd.via.array.ptr[1].via.raw.size] = 0;
+        rbtracer_add_expr(last_tracer_id, query);
 
       }
     }
