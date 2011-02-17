@@ -579,7 +579,7 @@ ruby_teardown(VALUE data)
   msgq_teardown();
 }
 
-static void
+static inline void
 msgq_setup()
 {
   pid_t pid = getpid();
@@ -603,22 +603,6 @@ msgq_setup()
 
   if (rbtracer.mqi_id == -1)
     fprintf(stderr, "msgget() failed to create msgq\n");
-
-  /*
-  struct msqid_ds stat;
-  int ret;
-
-  msgctl(rbtracer.mqo_id, IPC_STAT, &stat);
-  printf("cbytes: %lu, qbytes: %lu, qnum: %lu\n", stat.msg_cbytes, stat.msg_qbytes, stat.msg_qnum);
-
-  stat.msg_qbytes += 10;
-  ret = msgctl(rbtracer.mqo_id, IPC_SET, &stat);
-  printf("cbytes: %lu, qbytes: %lu, qnum: %lu\n", stat.msg_cbytes, stat.msg_qbytes, stat.msg_qnum);
-  printf("ret: %d, errno: %d\n", ret, errno);
-
-  msgctl(rbtracer.mqo_id, IPC_STAT, &stat);
-  printf("cbytes: %lu, qbytes: %lu, qnum: %lu\n", stat.msg_cbytes, stat.msg_qbytes, stat.msg_qnum);
-  */
 }
 
 static void
