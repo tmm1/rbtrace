@@ -53,7 +53,7 @@ timeofday_usec()
 #define BUF_SIZE 120
 #endif
 
-struct rbtracer_t {
+typedef struct {
   int id;
 
   char *query;
@@ -63,13 +63,12 @@ struct rbtracer_t {
 
   int num_exprs;
   char *exprs[MAX_EXPRS];
-};
-typedef struct rbtracer_t rbtracer_t;
+} rbtracer_t;
 
-struct event_msg {
+typedef struct {
   long mtype;
   char buf[BUF_SIZE];
-};
+} event_msg_t;
 
 static struct {
   st_table *mid_tbl;
@@ -123,7 +122,7 @@ rbtracer = {
     fprintf(stderr, "%" PRIu64 "," format, usec, __VA_ARGS__);\
     fprintf(stderr, "\n");\
   } else if (rbtracer.mqo_id != -1 && rbtracer.attached_pid) {\
-    struct event_msg msg;\
+    event_msg_t msg;\
     int ret = -1, n = 0;\
     \
     msg.mtype = 1;\
@@ -614,7 +613,7 @@ sigurg(int signal)
   msgq_setup();
   if (rbtracer.mqi_id == -1) return;
 
-  struct event_msg msg;
+  event_msg_t msg;
   int n = 0;
 
   char query[sizeof(msg.buf)];
