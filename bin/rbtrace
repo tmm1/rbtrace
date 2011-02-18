@@ -453,7 +453,7 @@ class RBTracer
 
         unless tracer == @last_tracer and @last_tracer[:last] == name
           puts
-          printf ' '*16 if @show_time
+          print ' '*16 if @show_time
           print @prefix*@nesting if @nesting > 0
           print name
         end
