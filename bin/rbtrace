@@ -4,6 +4,10 @@ require 'ffi'
 require 'msgpack'
 require 'trollop'
 
+class String
+  alias :bytesize :size
+end unless ''.respond_to?(:bytesize)
+
 module FFI::LastError
   def self.exception
     Errno::constants.map(&Errno.method(:const_get)).find{ |c| c.const_get(:Errno) == error }
@@ -44,7 +48,7 @@ module MsgQ
         FFI::LastError.raise
       end
 
-      msg[:buf].to_ptr.read_string
+      msg[:buf].to_ptr.read_string_length(BUF_SIZE)
     end
   end
 
@@ -297,7 +301,9 @@ class RBTracer
 
   def send_cmd(*cmd)
     begin
-      MsgQ::EventMsg.send_cmd(@qo, cmd.to_msgpack)
+      msg = cmd.to_msgpack
+      raise ArgumentError, 'command is too long' if msg.bytesize > MsgQ::EventMsg::BUF_SIZE
+      MsgQ::EventMsg.send_cmd(@qo, msg)
     rescue Errno::EINTR
       retry
     end
@@ -321,67 +327,76 @@ class RBTracer
     @out.puts(*args)
   end
 
+  def parse_cmd(line)
+    unpacker = MessagePack::Unpacker.new
+    unpacker.feed(line)
+
+    obj = nil
+    unpacker.each{|o| obj = o; break }
+    obj
+  end
+
   def process_line(line)
-    time, event, _id, *args = line.strip.split(',')
-    time = time.to_i
-    id = _id.to_i
+    return unless cmd = parse_cmd(line)
+    event = cmd.shift
 
     case event
     when 'attached'
-      @attached = true
-      if id != Process.pid
+      tracer_pid = *cmd
+      if tracer_pid != Process.pid
         STDERR.puts "*** process #{pid} is already being traced"
         exit!(-1)
       end
+
+      @attached = true
       return
 
     when 'detached'
-      @attached = false
+      tracer_pid = *cmd
+      if tracer_pid != Process.pid
+        STDERR.puts "*** process #{pid} detached #{tracer_pid}, but we are #{Process.pid}"
+      else
+        @attached = false
+      end
+
       return
     end
 
-    if !@attached
+    unless @attached
       STDERR.puts "*** got #{event} before attaching"
       return
     end
 
-    tracer = @tracers[id] if id > -1
-
     case event
     when 'mid'
-      @methods[id.to_i] = args.first
+      mid, name = *cmd
+      @methods[mid] = name
 
     when 'klass'
-      @klasses[_id.to_i(16)] = args.first
+      kid, name = *cmd
+      @klasses[kid] = name
 
     when 'add'
-      if id == -1
-        puts line
+      tracer_id, query = *cmd
+      if tracer_id == -1
+        STDERR.puts "*** unable to add tracer for #{query}"
       else
-        query = args.first
-        @tracers.delete(id)
-        @tracers[id][:query] = query
-      end
-
-    when 'remove'
-      if id == -1
-        puts line
-      else
-        @tracers.delete(id)
+        @tracers.delete(tracer_id)
+        @tracers[tracer_id][:query] = query
       end
 
     when 'newexpr'
-      expr_id, expr = *args
-      expr_id = expr_id.to_i
+      tracer_id, expr_id, expr = *cmd
+      tracer = @tracers[tracer_id]
 
-      if expr_id > -1 and tracer
+      if expr_id > -1
         tracer[:exprs][expr_id] = expr
       end
 
     when 'exprval'
-      expr_id = args.shift
-      val = args.join(',')
-      expr_id = expr_id.to_i
+      tracer_id, expr_id, val = *cmd
+
+      tracer = @tracers[tracer_id]
       expr = tracer[:exprs][expr_id]
 
       if tracer[:arglist]
@@ -395,11 +410,12 @@ class RBTracer
       tracer[:arglist] = true
 
     when 'call','ccall'
-      method, is_singleton, klass = *args
-      is_singleton = (is_singleton == '1')
-      klass = @klasses[klass.to_i(16)]
+      time, tracer_id, mid, is_singleton, klass = *cmd
+
+      tracer = @tracers[tracer_id]
+      klass = @klasses[klass]
       name = klass ? "#{klass}#{ is_singleton ? '.' : '#' }" : ''
-      name += @methods[method.to_i] || '(unknown)'
+      name += @methods[mid] || '(unknown)'
 
       tracer[:times] << time
       tracer[:names] << name
@@ -423,6 +439,9 @@ class RBTracer
       tracer[:last] = name
 
     when 'return','creturn'
+      time, tracer_id = *cmd
+      tracer = @tracers[tracer_id]
+
       @nesting -= 1 if @nesting > 0
 
       if start = tracer[:times].pop
@@ -450,14 +469,11 @@ class RBTracer
       tracer[:arglist] = false
 
     when 'slow', 'cslow'
-      diff, nesting, method, is_singleton, klass = *args
-      nesting = nesting.to_i
-      diff = diff.to_i
+      diff, nesting, mid, is_singleton, klass = *cmd
 
-      is_singleton = (is_singleton == '1')
-      klass = @klasses[klass.to_i(16)]
+      klass = @klasses[klass]
       name = klass ? "#{klass}#{ is_singleton ? '.' : '#' }" : ''
-      name += @methods[method.to_i] || '(unknown)'
+      name += @methods[mid] || '(unknown)'
 
       print @prefix*nesting if nesting > 0
       print name
@@ -473,7 +489,7 @@ class RBTracer
 
     end
   rescue => e
-    STDERR.puts "error on: #{line}"
+    STDERR.puts "error on #{event}: #{cmd.inspect}"
     raise e
   end
 

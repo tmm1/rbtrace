@@ -182,7 +182,6 @@ libraries and functions.
 
 ## todo
 
-* switch ipc to [msgpack](https://github.com/dhotson/msgpack/tree/master/c) instead of csv
 * add triggers to start tracing slow methods only inside another method
 * syntax check expressions before adding them
 * add special expressions for method args (_arg0_, _arguments_)

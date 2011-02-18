@@ -1,6 +1,7 @@
 #include <inttypes.h>
 #include <errno.h>
 #include <signal.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -92,6 +93,9 @@ static struct {
   key_t mqi_key;
   int mqo_id;
   int mqi_id;
+
+  msgpack_sbuffer *sbuf;
+  msgpack_packer *msgpacker;
 }
 rbtracer = {
   .mid_tbl = NULL,
@@ -113,32 +117,109 @@ rbtracer = {
   .mqo_key = 0,
   .mqi_key = 0,
   .mqo_id = -1,
-  .mqi_id = -1
+  .mqi_id = -1,
+
+  .sbuf = NULL,
+  .msgpacker = NULL
 };
 
-#define SEND_EVENT(format, ...) do {\
-  uint64_t usec = timeofday_usec();\
-  if (false) {\
-    fprintf(stderr, "%" PRIu64 "," format, usec, __VA_ARGS__);\
-    fprintf(stderr, "\n");\
-  } else if (rbtracer.mqo_id != -1 && rbtracer.attached_pid) {\
-    event_msg_t msg;\
-    int ret = -1, n = 0;\
-    \
-    msg.mtype = 1;\
-    snprintf(msg.buf, sizeof(msg.buf), "%" PRIu64 "," format, usec, __VA_ARGS__);\
-    \
-    for (n=0; n<10 && ret==-1; n++)\
-      ret = msgsnd(rbtracer.mqo_id, &msg, sizeof(msg)-sizeof(long), IPC_NOWAIT);\
-    \
-    if (ret == -1 && rbtracer.mqo_id != -1 && errno != EINVAL) {\
-      fprintf(stderr, "msgsnd(%d): %s\n", rbtracer.mqo_id, strerror(errno));\
-      struct msqid_ds stat;\
-      msgctl(rbtracer.mqo_id, IPC_STAT, &stat);\
-      fprintf(stderr, "cbytes: %lu, qbytes: %lu, qnum: %lu\n", stat.msg_cbytes, stat.msg_qbytes, stat.msg_qnum);\
-    }\
-  }\
-} while (0)
+static inline void
+SEND_EVENT(int nargs, char *name, ...)
+{
+  if (!rbtracer.attached_pid ||
+      !rbtracer.sbuf ||
+      !rbtracer.msgpacker ||
+      rbtracer.mqo_id == -1)
+    return;
+
+  int n;
+
+  msgpack_sbuffer_clear(rbtracer.sbuf);
+  msgpack_packer *pk = rbtracer.msgpacker;
+
+  msgpack_pack_array(pk, nargs+1);
+
+  msgpack_pack_raw(pk, strlen(name));
+  msgpack_pack_raw_body(pk, name, strlen(name));
+
+  if (nargs > 0) {
+    int type;
+    uint32_t uint;
+    int sint;
+    unsigned long ulong;
+    char *str;
+
+    va_list ap;
+    va_start(ap, name);
+
+    for (n=0; n<nargs; n++) {
+      type = va_arg(ap, int);
+      switch (type) {
+        case 't':
+          msgpack_pack_uint64(pk, timeofday_usec());
+          break;
+
+        case 'b':
+          if (va_arg(ap, int))
+            msgpack_pack_true(pk);
+          else
+            msgpack_pack_false(pk);
+          break;
+
+        case 'u':
+          uint = va_arg(ap, uint32_t);
+          msgpack_pack_uint32(pk, uint);
+          break;
+
+        case 'l':
+          ulong = va_arg(ap, unsigned long);
+          msgpack_pack_unsigned_long(pk, ulong);
+          break;
+
+        case 'd':
+          sint = va_arg(ap, int);
+          msgpack_pack_int(pk, sint);
+          break;
+
+        case 's':
+          str = va_arg(ap, char *);
+          if (!str)
+            str = "";
+
+          msgpack_pack_raw(pk, strlen(str));
+          msgpack_pack_raw_body(pk, str, strlen(str));
+          break;
+
+        default:
+          fprintf(stderr, "unknown type (%c) passed to SEND_EVENT\n", (char)type);
+      }
+    }
+
+    va_end(ap);
+  }
+
+  event_msg_t msg;
+  msg.mtype = 1;
+
+  if (rbtracer.sbuf->size > sizeof(msg.buf)) {
+    fprintf(stderr, "SEND_EVENT(): message is too large (%zd > %lu)\n", rbtracer.sbuf->size, sizeof(msg.buf));
+    return;
+  }
+
+  memcpy(msg.buf, rbtracer.sbuf->data, rbtracer.sbuf->size);
+
+  int ret = -1;
+  for (n=0; n<10 && ret==-1; n++)
+    ret = msgsnd(rbtracer.mqo_id, &msg, sizeof(msg)-sizeof(long), IPC_NOWAIT);
+
+  if (ret == -1 && rbtracer.mqo_id != -1 && errno != EINVAL) {
+    fprintf(stderr, "msgsnd(%d): %s\n", rbtracer.mqo_id, strerror(errno));
+
+    struct msqid_ds stat;
+    msgctl(rbtracer.mqo_id, IPC_STAT, &stat);
+    fprintf(stderr, "cbytes: %lu, qbytes: %lu, qnum: %lu\n", stat.msg_cbytes, stat.msg_qbytes, stat.msg_qnum);
+  }
+}
 
 static inline void
 SEND_NAMES(ID mid, VALUE klass)
@@ -148,10 +229,10 @@ SEND_NAMES(ID mid, VALUE klass)
 
   if (!st_is_member(rbtracer.mid_tbl, mid)) {
     st_insert(rbtracer.mid_tbl, (st_data_t)mid, (st_data_t)1);
-    SEND_EVENT(
-      "mid,%lu,%s",
-      mid,
-      rb_id2name(mid)
+    SEND_EVENT(2,
+      "mid",
+      'l', mid,
+      's', rb_id2name(mid)
     );
   }
 
@@ -160,10 +241,10 @@ SEND_NAMES(ID mid, VALUE klass)
 
   if (!st_is_member(rbtracer.klass_tbl, klass)) {
     st_insert(rbtracer.klass_tbl, (st_data_t)klass, (st_data_t)1);
-    SEND_EVENT(
-      "klass,%p,%s",
-      (void*)klass,
-      rb_class2name(klass)
+    SEND_EVENT(2,
+      "klass",
+      'l', klass,
+      's', rb_class2name(klass)
     );
   }
 }
@@ -232,14 +313,13 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
 
     if (diff > rbtracer.threshold * 1e3) {
       SEND_NAMES(mid, singleton ? self : klass);
-      SEND_EVENT(
-        "%s,-1,%" PRIu64 ",%d,%lu,%d,%p",
+      SEND_EVENT(5,
         event == RUBY_EVENT_RETURN ? "slow" : "cslow",
-        diff,
-        rbtracer.num_calls,
-        mid,
-        singleton,
-        (void*)(singleton ? self : klass)
+        'u', diff,
+        'u', rbtracer.num_calls,
+        'l', mid,
+        'b', singleton,
+        'l', singleton ? self : klass
       );
     }
 
@@ -276,13 +356,13 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
     case RUBY_EVENT_CALL:
     case RUBY_EVENT_C_CALL:
       SEND_NAMES(mid, singleton ? self : klass);
-      SEND_EVENT(
-        "%s,%d,%lu,%d,%p",
+      SEND_EVENT(5,
         event == RUBY_EVENT_CALL ? "call" : "ccall",
-        tracer ? tracer->id : 255, // hax
-        mid,
-        singleton,
-        (void*)(singleton ? self : klass)
+        't',
+        'd', tracer ? tracer->id : 255, // hax
+        'l', mid,
+        'b', singleton,
+        'l', singleton ? self : klass
       );
 
       if (tracer && tracer->num_exprs) {
@@ -313,13 +393,12 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
             result = RSTRING_PTR(val);
           }
 
-          if (result) {
-            SEND_EVENT(
-              "%s,%d,%d,%s",
+          if (result && *result) {
+            SEND_EVENT(3,
               "exprval",
-              tracer->id,
-              i,
-              result
+              'd', tracer->id,
+              'd', i,
+              's', result
             );
           }
         }
@@ -328,10 +407,10 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
 
     case RUBY_EVENT_RETURN:
     case RUBY_EVENT_C_RETURN:
-      SEND_EVENT(
-        "%s,%d",
+      SEND_EVENT(2,
         event == RUBY_EVENT_RETURN ? "return" : "creturn",
-        tracer ? tracer->id : 255 // hax
+        't',
+        'd', tracer ? tracer->id : 255 // hax
       );
       break;
   }
@@ -407,10 +486,10 @@ rbtracer_remove(char *query, int id)
   }
 
 out:
-  SEND_EVENT(
-    "remove,%d,%s",
-    tracer_id,
-    query
+  SEND_EVENT(2,
+    "remove",
+    'd', tracer_id,
+    's', query
   );
   return tracer_id;
 }
@@ -499,10 +578,10 @@ rbtracer_add(char *query)
   rbtracer.num++;
 
 out:
-  SEND_EVENT(
-    "add,%d,%s",
-    tracer_id,
-    query
+  SEND_EVENT(2,
+    "add",
+    'd', tracer_id,
+    's', query
   );
   return tracer_id;
 }
@@ -527,11 +606,11 @@ rbtracer_add_expr(int id, char *expr)
   }
 
 out:
-  SEND_EVENT(
-    "newexpr,%d,%d,%s",
-    tracer_id,
-    expr_id,
-    expr
+  SEND_EVENT(3,
+    "newexpr",
+    'd', tracer_id,
+    'd', expr_id,
+    's', expr
   );
 }
 
@@ -658,16 +737,17 @@ sigurg(int signal)
         if (pid && rbtracer.attached_pid == 0)
           rbtracer.attached_pid = pid;
 
-        SEND_EVENT(
-          "attached,%u",
-          rbtracer.attached_pid
+        SEND_EVENT(1,
+          "attached",
+          'u', (uint32_t) rbtracer.attached_pid
         );
 
       } else if (0 == strncmp("detach", str.ptr, str.size)) {
-        SEND_EVENT(
-          "detached,%u",
-          rbtracer.attached_pid
+        SEND_EVENT(1,
+          "detached",
+          'u', (uint32_t) rbtracer.attached_pid
         );
+
         rbtracer.attached_pid = 0;
         rbtracer_remove_all();
 
@@ -713,6 +793,10 @@ sigurg(int signal)
 void
 Init_rbtrace()
 {
+  // setup msgpack
+  rbtracer.sbuf = msgpack_sbuffer_new();
+  rbtracer.msgpacker = msgpack_packer_new(rbtracer.sbuf, msgpack_sbuffer_write);
+
   // zero out tracer
   memset(&rbtracer.list, 0, sizeof(rbtracer.list));
 
