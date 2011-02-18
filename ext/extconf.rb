@@ -21,7 +21,7 @@ Dir.chdir('src') do
 
   sys("tar zxvf #{msgpack}")
   Dir.chdir(dir) do
-    sys("./configure --disable-shared --prefix=#{CWD}/dst/")
+    sys("./configure --disable-shared --with-pic --prefix=#{CWD}/dst/")
     sys("make install")
   end
 end
