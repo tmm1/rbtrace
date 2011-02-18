@@ -51,7 +51,7 @@ timeofday_usec()
 #define MAX_TRACERS 100 // max method tracers
 #define MAX_EXPRS 10    // max expressions per tracer
 #ifndef BUF_SIZE        // msgq buffer size
-#define BUF_SIZE 120
+#define BUF_SIZE 64
 #endif
 
 typedef struct {

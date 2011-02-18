@@ -22,7 +22,7 @@ module MsgQ
   ffi_lib 'c'
 
   class EventMsg < FFI::Struct
-    BUF_SIZE = RUBY_PLATFORM =~ /linux/ ? 256 : 120
+    BUF_SIZE = RUBY_PLATFORM =~ /linux/ ? 256 : 64
     IPC_NOWAIT = 004000
 
     layout :mtype, :long,
