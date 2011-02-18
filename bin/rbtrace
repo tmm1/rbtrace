@@ -604,7 +604,7 @@ EOS
     end
 
     if out = opts[:output]
-      file = File.open(out, opts[:append] ? 'a+' : 'w')
+      output = File.open(out, opts[:append] ? 'a+' : 'w')
     end
 
     slow = nil
@@ -663,8 +663,8 @@ EOS
         tracer.add(methods)
       end
 
-      if file
-        tracer.out = file
+      if output
+        tracer.out = output
       end
 
       tracer.prefix = ' ' * opts[:prefix]
