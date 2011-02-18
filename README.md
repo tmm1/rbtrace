@@ -5,12 +5,40 @@ time.
 
 rbtrace works on ruby 1.8 and 1.9, running on linux or mac osx.
 
+rbtrace is designed to have minimal overhead, and should be safe to run
+in production.
+
 ## usage
 
     % gem install rbtrace
     % rbtrace --help
 
-## examples
+### tracer types
+
+rbtrace has several different tracing modes:
+
+#### firehose: show everything
+
+    % rbtrace -p <PID> --firehose
+
+#### slow: show any method calls that take longer than `<N>` milliseconds
+
+    % rbtrace -p <PID> --slow=<N>
+
+#### methods: trace calls to specific methods
+
+    % rbtrace -p <PID> --methods "Kernel#sleep" "Proc#call"
+
+### predefined tracers
+
+rbtrace also includes a set of predefined tracers for popular ruby
+libraries and functions.
+
+#### trace calls to activerecord adapters and any i/o functions
+
+    % rbtrace -p <PID> -c activerecord io
+
+## detailed example
 
 ### require rbtrace into a process
 
