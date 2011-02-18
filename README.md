@@ -31,8 +31,8 @@ rbtrace has several different tracing modes:
 
 ## predefined tracers
 
-rbtrace also includes a set of predefined tracers for popular ruby
-libraries and functions.
+rbtrace also includes a set of [predefined tracers](https://github.com/tmm1/rbtrace/tree/master/tracers)
+for popular ruby libraries and functions.
 
 ### trace calls to activerecord adapters and any i/o functions
 
@@ -147,7 +147,7 @@ libraries and functions.
 
 ### get values of variables and other expressions
 
-    % rbtrace -p 87854 -m "String#gsub(self, @test)" "String#*(self)" "String#multiply_vowels(self, self.length, num)"
+    % rbtrace -p 87854 -m "String#gsub(self, @test)" "String#*(self, __source__)" "String#multiply_vowels(self, self.length, num)"
     *** attached to process 87854
 
     String#multiply_vowels(self="hello", self.length=5, num=3)
