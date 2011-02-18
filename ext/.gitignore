@@ -2,6 +2,7 @@ Makefile
 *.bundle
 *.o
 *.so
+*.a
 mkmf.log
 conftest.dSYM/
 dst/
