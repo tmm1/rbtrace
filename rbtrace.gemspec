@@ -1,6 +1,6 @@
 Gem::Specification.new do |s|
   s.name = 'rbtrace'
-  s.version = '0.2.8'
+  s.version = '0.3.0'
   s.homepage = 'http://github.com/tmm1/rbtrace'
 
   s.authors = 'Aman Gupta'
