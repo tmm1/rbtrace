@@ -1,9 +1,9 @@
 PATH
   remote: .
   specs:
-    rbtrace (0.3.1)
+    rbtrace (0.3.2)
       ffi (>= 1.0.5)
-      msgpack (>= 0.4.4)
+      msgpack (>= 0.4.3)
       trollop (>= 1.16.2)
 
 GEM
