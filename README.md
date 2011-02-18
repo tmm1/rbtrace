@@ -13,28 +13,28 @@ in production.
     % gem install rbtrace
     % rbtrace --help
 
-### tracer types
+## tracer types
 
 rbtrace has several different tracing modes:
 
-#### firehose: show everything
+### firehose: show everything
 
     % rbtrace -p <PID> --firehose
 
-#### slow: show any method calls that take longer than `<N>` milliseconds
+### slow: show any method calls that take longer than `<N>` milliseconds
 
     % rbtrace -p <PID> --slow=<N>
 
-#### methods: trace calls to specific methods
+### methods: trace calls to specific methods
 
     % rbtrace -p <PID> --methods "Kernel#sleep" "Proc#call"
 
-### predefined tracers
+## predefined tracers
 
 rbtrace also includes a set of predefined tracers for popular ruby
 libraries and functions.
 
-#### trace calls to activerecord adapters and any i/o functions
+### trace calls to activerecord adapters and any i/o functions
 
     % rbtrace -p <PID> -c activerecord io
 
