@@ -11,18 +11,20 @@ end
 require 'mkmf'
 require 'fileutils'
 
-Logging.message "Building msgpack\n"
+unless File.exists?("#{CWD}/dst/lib/libmsgpackc.a")
+  Logging.message "Building msgpack\n"
 
-msgpack = File.basename('msgpack-0.5.4.tar.gz')
-dir = File.basename(msgpack, '.tar.gz')
+  msgpack = File.basename('msgpack-0.5.4.tar.gz')
+  dir = File.basename(msgpack, '.tar.gz')
 
-Dir.chdir('src') do
-  FileUtils.rm_rf(dir) if File.exists?(dir)
+  Dir.chdir('src') do
+    FileUtils.rm_rf(dir) if File.exists?(dir)
 
-  sys("tar zxvf #{msgpack}")
-  Dir.chdir(dir) do
-    sys("./configure --disable-shared --with-pic --prefix=#{CWD}/dst/")
-    sys("make install")
+    sys("tar zxvf #{msgpack}")
+    Dir.chdir(dir) do
+      sys("./configure --disable-shared --with-pic --prefix=#{CWD}/dst/")
+      sys("make install")
+    end
   end
 end
 
