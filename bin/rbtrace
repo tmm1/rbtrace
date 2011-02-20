@@ -605,6 +605,7 @@ EOS
 
     if out = opts[:output]
       output = File.open(out, opts[:append] ? 'a+' : 'w')
+      output.sync = true
     end
 
     slow = nil
