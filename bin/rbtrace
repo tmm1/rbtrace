@@ -207,13 +207,18 @@ class RBTracer
       next if func.empty?
 
       if func =~ /^(.+)\((.+)\)$/
-        func, args = $1, $2
+        name, args = $1, $2
         args = args.split(',').map{ |a| a.strip }
       end
 
-      send_cmd(:add, func)
+      send_cmd(:add, name)
 
       args.each do |arg|
+        begin
+          eval("BEGIN {return true}\n#{arg}")
+        rescue Exception => e
+          raise ArgumentError, "#{e.class} for expression #{arg.inspect} in method #{func.inspect}"
+        end
         send_cmd(:addexpr, arg)
       end if args and args.any?
     end

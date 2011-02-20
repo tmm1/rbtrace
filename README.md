@@ -188,7 +188,6 @@ for popular ruby libraries and functions.
 
 * add triggers to start tracing slow methods only inside another method
 * add watch expressions to fire tracers only when an expression is true
-* syntax check expressions before adding them
 * add special expressions for method args (_arg0_, _arguments_)
 * optimize local variable lookup to avoid instance_eval
 * run process via bin/rbtrace (to trace rubygems and bootup time)
