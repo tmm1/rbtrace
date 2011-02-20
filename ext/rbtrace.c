@@ -719,6 +719,10 @@ sigurg(int signal)
       if (!success || cmd.type != MSGPACK_OBJECT_ARRAY)
         continue;
 
+      /* fprintf(stderr, "GOT: ");*/
+      /* msgpack_object_print(stderr, cmd);*/
+      /* fprintf(stderr, "\n");*/
+
       ary = cmd.via.array;
 
       if (ary.size < 1 ||
