@@ -14,6 +14,7 @@ while true
       Process.pid
       'hello'.multiply_vowels(3){ :ohai }
       sleep rand*0.5
+      GC.start
     end
   }.call
 end

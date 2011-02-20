@@ -159,7 +159,7 @@ class RBTracer
         :arglist => false
       }
     }
-    @max_nesting = @nesting = 0
+    @max_nesting = @last_nesting = @nesting = 0
     @last_tracer = nil
 
     @out = STDOUT
@@ -167,6 +167,7 @@ class RBTracer
 
     @show_time = false
     @show_duration = true
+    @watch_slow = false
 
     attach
   end
@@ -177,6 +178,7 @@ class RBTracer
   #
   # Returns nothing.
   def watch(msec)
+    @watch_slow = true
     send_cmd(:watch, msec)
   end
 
@@ -185,6 +187,13 @@ class RBTracer
   # Returns nothing.
   def firehose
     send_cmd(:firehose)
+  end
+
+  # Turn on GC tracing.
+  #
+  # Returns nothing.
+  def gc
+    send_cmd(:gc)
   end
 
   # Add tracers for the given list of methods.
@@ -435,6 +444,7 @@ class RBTracer
 
       @nesting += 1
       @max_nesting = @nesting if @nesting > @max_nesting
+      @last_nesting = @nesting
       @last_tracer = tracer
       tracer[:last] = name
 
@@ -467,6 +477,7 @@ class RBTracer
       end
 
       tracer[:arglist] = false
+      @last_nesting = @nesting
 
     when 'slow', 'cslow'
       time, diff, nesting, mid, is_singleton, klass = *cmd
@@ -490,8 +501,23 @@ class RBTracer
       puts
       puts if nesting == 0
 
+      @last_nesting = nesting
+
+    when 'gc'
+      time, = *cmd
+
+      puts unless @watch_slow
+      if @show_time
+        t = Time.at(time/1_000_000)
+        print t.strftime("%H:%M:%S.")
+        print "%06d " % (time - t.to_f*1_000_000).round
+      end
+      print @prefix*@last_nesting if @last_nesting > 0
+      print "garbage_collect"
+      puts if @watch_slow
+
     else
-      puts "unknown event: #{line}"
+      puts "unknown event #{event}: #{cmd.inspect}"
 
     end
   rescue => e
@@ -531,6 +557,7 @@ Tracers:
   rbtrace --firehose       # trace all method calls
   rbtrace --slow=250       # trace method calls slower than 250ms
   rbtrace --methods a b c  # trace calls to given methods
+  rbtrace --gc             # trace garbage collections
 
   rbtrace -c io            # trace common input/output functions
   rbtrace -c eventmachine  # trace common eventmachine functions
@@ -575,6 +602,9 @@ EOS
         :type => :strings,
         :short => '-m'
 
+      opt :gc,
+        "trace garbage collections"
+
       opt :start_time,
         "show start time for each method call",
         :short => '-t'
@@ -617,6 +647,11 @@ EOS
     slow = nil
     firehose = nil
     methods = nil
+    gc = nil
+
+    if opts[:gc_given]
+      gc = true
+    end
 
     if opts[:slow_given]
       slow = opts[:slow]
@@ -649,8 +684,8 @@ EOS
         end
       end
 
-    else
-      $stderr.puts "Error: --slow, --firehose, --methods or --config required."
+    elsif !gc
+      $stderr.puts "Error: --slow, --gc, --firehose, --methods or --config required."
       $stderr.puts "Try --help for help."
       exit(-1)
     end
@@ -660,6 +695,10 @@ EOS
         tracer = RBTracer.new(opts[:pid])
       rescue ArgumentError => e
         parser.die :pid, "(#{e.message})"
+      end
+
+      if gc
+        tracer.gc
       end
 
       if slow

@@ -29,6 +29,10 @@ rbtrace has several different tracing modes:
 
     % rbtrace -p <PID> --methods "Kernel#sleep" "Proc#call"
 
+### gc: trace garbage collections
+
+    % rbtrace -p <PID> --gc
+
 ## predefined tracers
 
 rbtrace also includes a set of [predefined tracers](https://github.com/tmm1/rbtrace/tree/master/tracers)
@@ -182,7 +186,6 @@ for popular ruby libraries and functions.
 
 ## todo
 
-* add simple garbage collection tracer
 * allow slow tracing of specific methods (--slow + --methods)
 * add triggers to start tracing slow methods only inside another method
 * add watch expressions to fire tracers only when an expression is true

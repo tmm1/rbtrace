@@ -79,6 +79,7 @@ static struct {
 
   bool installed;
 
+  bool gc;
   bool firehose;
 
   bool slow;
@@ -105,6 +106,7 @@ rbtracer = {
 
   .installed = false,
 
+  .gc = false,
   .firehose = false,
 
   .slow = false,
@@ -256,6 +258,8 @@ SEND_NAMES(ID mid, VALUE klass)
   }
 }
 
+static int in_event_hook = 0;
+
 static void
 #ifdef RUBY_VM
 event_hook(rb_event_flag_t event, VALUE data, VALUE self, ID mid, VALUE klass)
@@ -263,8 +267,6 @@ event_hook(rb_event_flag_t event, VALUE data, VALUE self, ID mid, VALUE klass)
 event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
 #endif
 {
-  static int in_event_hook = 0;
-
   // do not re-enter this function
   // after this, must `goto out` instead of `return`
   if (in_event_hook) return;
@@ -507,6 +509,7 @@ rbtracer_remove_all()
 {
   rbtracer.firehose = false;
   rbtracer.slow = false;
+  rbtracer.gc = false;
 
   int i;
   for (i=0; i<MAX_TRACERS; i++) {
@@ -797,14 +800,34 @@ sigurg(int signal)
         query[str.size] = 0;
         rbtracer_add_expr(last_tracer_id, query);
 
+      } else if (0 == strncmp("gc", str.ptr, str.size)) {
+        rbtracer.gc = true;
+
       }
     }
   }
 }
 
+static void
+rbtrace_gc_mark()
+{
+  if (rbtracer.gc && !in_event_hook) {
+    SEND_EVENT(1,
+      "gc",
+      'n'
+    );
+  }
+}
+
+static VALUE gc_hook;
+
 void
 Init_rbtrace()
 {
+  // hook into the gc
+  gc_hook = Data_Wrap_Struct(rb_cObject, rbtrace_gc_mark, NULL, NULL);
+  rb_global_variable(&gc_hook);
+
   // setup msgpack
   rbtracer.sbuf = msgpack_sbuffer_new();
   rbtracer.msgpacker = msgpack_packer_new(rbtracer.sbuf, msgpack_sbuffer_write);
