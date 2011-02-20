@@ -1,7 +1,15 @@
 #!/bin/sh
 set -e
 
-make -C ext 2>&1 >/dev/null
+cd ext
+ruby extconf.rb
+make clean
+make
+cd ..
+
+bundle check
+export RUBYOPT="-I."
+
 ruby server.rb &
 export PID=$!
 
