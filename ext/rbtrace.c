@@ -124,7 +124,7 @@ rbtracer = {
 };
 
 static inline void
-SEND_EVENT(int nargs, char *name, ...)
+SEND_EVENT(int nargs, const char *name, ...)
 {
   if (!rbtracer.attached_pid ||
       !rbtracer.sbuf ||
@@ -191,7 +191,7 @@ SEND_EVENT(int nargs, char *name, ...)
         case 's':
           str = va_arg(ap, char *);
           if (!str)
-            str = "";
+            str = (char *)"";
 
           msgpack_pack_raw(pk, strlen(str));
           msgpack_pack_raw_body(pk, str, strlen(str));
