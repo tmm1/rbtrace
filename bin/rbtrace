@@ -504,8 +504,9 @@ class RBTracer
         print "<%f>" % (diff/1_000_000.0)
       end
       puts
-      puts if nesting == 0
+      puts if nesting == 0 and @max_nesting > 1
 
+      @max_nesting = nesting if nesting > @max_nesting
       @last_nesting = nesting
 
     when 'gc'
