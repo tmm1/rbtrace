@@ -37,6 +37,7 @@ trace -m "String#gsub(self,@test)" "String#*(self,__source__)" "String#multiply_
 trace --gc --slow=200
 trace --gc -m Dir.
 trace --slow=250
+trace --slow=250 -m sleep
 trace --firehose
 
 cleanup
