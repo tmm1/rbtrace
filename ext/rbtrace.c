@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <inttypes.h>
 #include <errno.h>
 #include <signal.h>
@@ -258,6 +259,35 @@ rbtrace__send_names(ID mid, VALUE klass)
   }
 }
 
+static void
+rbtracer__resolve_query(char *query, VALUE *klass, VALUE *self, ID *mid)
+{
+  char *idx = NULL, *method = NULL;
+
+  assert(klass && self && mid);
+  *klass = *self = *mid = 0;
+
+  if (NULL != (idx = rindex(query, '.'))) {
+    *idx = 0;
+    *self = rb_eval_string_protect(query, 0);
+    *idx = '.';
+
+    method = idx+1;
+  } else if (NULL != (idx = rindex(query, '#'))) {
+    *idx = 0;
+    *klass = rb_eval_string_protect(query, 0);
+    *idx = '#';
+
+    method = idx+1;
+  } else {
+    method = query;
+  }
+
+  if (method && *method) {
+    *mid = rb_intern(method);
+  }
+}
+
 static int in_event_hook = 0;
 
 static void
@@ -275,8 +305,8 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
   // skip allocators
   if (mid == ID_ALLOCATOR) goto out;
 
-  // some serious 1.9.2 hax
 #ifdef RUBY_VM
+  // some serious 1.9.2 hax
   if (mid == 0 && ruby_current_thread) {
     ID _mid;
     VALUE _klass;
@@ -545,34 +575,13 @@ rbtracer_add(char *query)
   }
   if (!tracer) goto out;
 
-  char *idx, *method;
   VALUE klass = 0, self = 0;
   ID mid = 0;
 
-  if (NULL != (idx = rindex(query, '.'))) {
-    *idx = 0;
-    self = rb_eval_string_protect(query, 0);
-    *idx = '.';
+  rbtracer__resolve_query(query, &klass, &self, &mid);
 
-    method = idx+1;
-  } else if (NULL != (idx = rindex(query, '#'))) {
-    *idx = 0;
-    klass = rb_eval_string_protect(query, 0);
-    *idx = '#';
-
-    method = idx+1;
-  } else {
-    method = query;
-  }
-
-  if (method && *method) {
-    mid = rb_intern(method);
-    if (!mid) goto out;
-  } else if (klass || self) {
-    mid = 0;
-  } else {
+  if (!mid && !klass && !self)
     goto out;
-  }
 
   memset(tracer, 0, sizeof(*tracer));
 
