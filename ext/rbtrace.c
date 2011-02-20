@@ -326,7 +326,44 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
     singleton = FL_TEST(klass, FL_SINGLETON);
   }
 
-  // are we watching for any slow methods?
+  rbtracer_t *tracer = NULL;
+
+  if (rbtracer.firehose) {
+    // trace everything
+
+  } else if (rbtracer.num > 0) {
+    // tracing only specific methods
+    int i, n;
+    for (i=0, n=0; i<MAX_TRACERS && n<rbtracer.num; i++) {
+      rbtracer_t *curr = &rbtracer.list[i];
+
+      if (curr->query) {
+        n++;
+
+        if ((!curr->mid   || curr->mid == mid) &&
+            (!curr->klass || curr->klass == klass) &&
+            (!curr->self  || curr->self == self))
+        {
+          tracer = curr;
+          break;
+        }
+      }
+    }
+
+    // no tracer for current method call
+    if (!tracer) goto out;
+
+  } else if (rbtracer.slow) {
+    // trace anything that's slow
+    // fall through to slow logic below, after the previous conditional
+    // selects specific methods we might be interested in
+
+  } else {
+    // what are we doing here?
+    goto out;
+  }
+
+  // are we watching for slow method calls?
   if (rbtracer.slow) {
     uint64_t usec = timeofday_usec(), diff = 0;
 
@@ -366,34 +403,6 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
     goto out;
   }
 
-  int i, n;
-  rbtracer_t *tracer = NULL;
-
-  if (!rbtracer.firehose) {
-    // are there specific methods we're waiting for?
-    if (rbtracer.num == 0) goto out;
-
-    for (i=0, n=0; i<MAX_TRACERS && n<rbtracer.num; i++) {
-      rbtracer_t *curr = &rbtracer.list[i];
-
-      if (curr->query) {
-        n++;
-
-        if (!curr->mid || curr->mid == mid) {
-          if (!curr->klass || curr->klass == klass) {
-            if (!curr->self || curr->self == self) {
-              tracer = curr;
-              break;
-            }
-          }
-        }
-      }
-    }
-
-    // no matching method tracer found, so bail!
-    if (!tracer) goto out;
-  }
-
   switch (event) {
     case RUBY_EVENT_CALL:
     case RUBY_EVENT_C_CALL:
@@ -408,6 +417,7 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
       );
 
       if (tracer && tracer->num_exprs) {
+        int i;
         for (i=0; i<tracer->num_exprs; i++) {
           char *expr = tracer->exprs[i];
           size_t len = strlen(expr);

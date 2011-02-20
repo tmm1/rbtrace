@@ -639,36 +639,28 @@ EOS
       parser.parse(ARGV)
     end
 
+    unless %w[ slow firehose methods config gc ].find{ |n| opts[:"#{n}_given"] }
+      $stderr.puts "Error: --slow, --gc, --firehose, --methods or --config required."
+      $stderr.puts "Try --help for help."
+      exit(-1)
+    end
+
     if out = opts[:output]
       output = File.open(out, opts[:append] ? 'a+' : 'w')
       output.sync = true
     end
 
-    slow = nil
-    firehose = nil
-    methods = nil
-    gc = nil
+    methods = []
 
-    if opts[:gc_given]
-      gc = true
+    if opts[:methods_given]
+      methods += opts[:methods]
     end
 
-    if opts[:slow_given]
-      slow = opts[:slow]
-
-    elsif opts[:firehose]
-      firehose = true
-
-    elsif opts[:methods]
-      methods = opts[:methods]
-
-    elsif opts[:config_given]
-      methods = []
-
+    if opts[:config_given]
       Array(opts[:config]).each do |config|
         file = [
           config,
-          File.expand_path("../../tracers/#{config}.tracer",__FILE__)
+          File.expand_path("../../tracers/#{config}.tracer", __FILE__)
         ].find{ |f| File.exists?(f) }
 
         unless file
@@ -683,11 +675,6 @@ EOS
           methods << line
         end
       end
-
-    elsif !gc
-      $stderr.puts "Error: --slow, --gc, --firehose, --methods or --config required."
-      $stderr.puts "Try --help for help."
-      exit(-1)
     end
 
     begin
@@ -697,16 +684,20 @@ EOS
         parser.die :pid, "(#{e.message})"
       end
 
-      if gc
+      if opts[:gc_given]
         tracer.gc
       end
 
-      if slow
-        tracer.watch(slow)
-      elsif firehose
+      if opts[:firehose_given]
         tracer.firehose
-      elsif methods
-        tracer.add(methods)
+      else
+        if methods.any?
+          tracer.add(methods)
+        end
+
+        if opts[:slow_given]
+          tracer.watch(opts[:slow])
+        end
       end
 
       if output
