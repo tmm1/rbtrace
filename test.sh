@@ -2,8 +2,8 @@
 set -e
 
 cd ext
+[ -f Makefile ] && make clean
 ruby extconf.rb
-make clean
 make
 cd ..
 
