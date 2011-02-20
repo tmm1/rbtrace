@@ -213,14 +213,14 @@ class RBTracer
 
       send_cmd(:add, name || func)
 
-      args.each do |arg|
-        begin
-          eval("BEGIN {return true}\n#{arg}")
-        rescue Exception => e
-          raise ArgumentError, "#{e.class} for expression #{arg.inspect} in method #{func.inspect}"
+      if args and args.any?
+        args.each do |arg|
+          if (err = valid_syntax?(arg)) != true
+            raise ArgumentError, "#{err.class} for expression #{arg.inspect} in method #{func.inspect}"
+          end
+          send_cmd(:addexpr, arg)
         end
-        send_cmd(:addexpr, arg)
-      end if args and args.any?
+      end
     end
   end
 
@@ -331,6 +331,14 @@ class RBTracer
     # on linux, an incoming signal will interrupt msgrcv()
     # regardless of what SA_RESTART is set to
     retry
+  end
+
+  def valid_syntax?(code)
+    begin
+      eval("#{code}\nBEGIN {return true}", nil, 'rbtrace_expression', 0)
+    rescue Exception => e
+      e
+    end
   end
 
   def print(*args)
