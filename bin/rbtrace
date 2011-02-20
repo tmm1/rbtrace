@@ -469,11 +469,17 @@ class RBTracer
       tracer[:arglist] = false
 
     when 'slow', 'cslow'
-      diff, nesting, mid, is_singleton, klass = *cmd
+      time, diff, nesting, mid, is_singleton, klass = *cmd
 
       klass = @klasses[klass]
       name = klass ? "#{klass}#{ is_singleton ? '.' : '#' }" : ''
       name += @methods[mid] || '(unknown)'
+
+      if @show_time
+        t = Time.at(time/1_000_000)
+        print t.strftime("%H:%M:%S.")
+        print "%06d " % (time - t.to_f*1_000_000).round
+      end
 
       print @prefix*nesting if nesting > 0
       print name

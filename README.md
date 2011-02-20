@@ -183,7 +183,6 @@ for popular ruby libraries and functions.
 ## todo
 
 * add simple garbage collection tracer
-* show timestamps (-t) in slow tracer mode
 * add triggers to start tracing slow methods only inside another method
 * add watch expressions to fire tracers only when an expression is true
 * syntax check expressions before adding them

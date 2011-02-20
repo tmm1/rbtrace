@@ -144,8 +144,10 @@ SEND_EVENT(int nargs, char *name, ...)
 
   if (nargs > 0) {
     int type;
-    uint32_t uint;
+
     int sint;
+    uint32_t uint;
+    uint64_t uint64;
     unsigned long ulong;
     char *str;
 
@@ -156,6 +158,11 @@ SEND_EVENT(int nargs, char *name, ...)
       type = va_arg(ap, int);
       switch (type) {
         case 't':
+          uint64 = va_arg(ap, uint64_t);
+          msgpack_pack_uint64(pk, uint64);
+          break;
+
+        case 'n':
           msgpack_pack_uint64(pk, timeofday_usec());
           break;
 
@@ -313,8 +320,9 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
 
     if (diff > rbtracer.threshold * 1e3) {
       SEND_NAMES(mid, singleton ? self : klass);
-      SEND_EVENT(5,
+      SEND_EVENT(6,
         event == RUBY_EVENT_RETURN ? "slow" : "cslow",
+        't', rbtracer.call_times[ rbtracer.num_calls ],
         'u', diff,
         'u', rbtracer.num_calls,
         'l', mid,
@@ -358,7 +366,7 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
       SEND_NAMES(mid, singleton ? self : klass);
       SEND_EVENT(5,
         event == RUBY_EVENT_CALL ? "call" : "ccall",
-        't',
+        'n',
         'd', tracer ? tracer->id : 255, // hax
         'l', mid,
         'b', singleton,
@@ -409,7 +417,7 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
     case RUBY_EVENT_C_RETURN:
       SEND_EVENT(2,
         event == RUBY_EVENT_RETURN ? "return" : "creturn",
-        't',
+        'n',
         'd', tracer ? tracer->id : 255 // hax
       );
       break;
