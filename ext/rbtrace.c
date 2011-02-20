@@ -374,13 +374,15 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
     if (rbtracer.num == 0) goto out;
 
     for (i=0, n=0; i<MAX_TRACERS && n<rbtracer.num; i++) {
-      if (rbtracer.list[i].query) {
+      rbtracer_t *curr = &rbtracer.list[i];
+
+      if (curr->query) {
         n++;
 
-        if (!rbtracer.list[i].mid || rbtracer.list[i].mid == mid) {
-          if (!rbtracer.list[i].klass || rbtracer.list[i].klass == klass) {
-            if (!rbtracer.list[i].self || rbtracer.list[i].self == self) {
-              tracer = &rbtracer.list[i];
+        if (!curr->mid || curr->mid == mid) {
+          if (!curr->klass || curr->klass == klass) {
+            if (!curr->self || curr->self == self) {
+              tracer = curr;
               break;
             }
           }
