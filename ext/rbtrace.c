@@ -126,7 +126,7 @@ rbtracer = {
 };
 
 static inline void
-SEND_EVENT(int nargs, const char *name, ...)
+rbtrace__send_event(int nargs, const char *name, ...)
 {
   if (!rbtracer.attached_pid ||
       !rbtracer.sbuf ||
@@ -200,7 +200,7 @@ SEND_EVENT(int nargs, const char *name, ...)
           break;
 
         default:
-          fprintf(stderr, "unknown type (%c) passed to SEND_EVENT\n", (char)type);
+          fprintf(stderr, "unknown type (%c) passed to rbtrace__send_event\n", (char)type);
       }
     }
 
@@ -211,7 +211,7 @@ SEND_EVENT(int nargs, const char *name, ...)
   msg.mtype = 1;
 
   if (rbtracer.sbuf->size > sizeof(msg.buf)) {
-    fprintf(stderr, "SEND_EVENT(): message is too large (%zd > %lu)\n", rbtracer.sbuf->size, sizeof(msg.buf));
+    fprintf(stderr, "rbtrace__send_event(): message is too large (%zd > %lu)\n", rbtracer.sbuf->size, sizeof(msg.buf));
     return;
   }
 
@@ -231,14 +231,14 @@ SEND_EVENT(int nargs, const char *name, ...)
 }
 
 static inline void
-SEND_NAMES(ID mid, VALUE klass)
+rbtrace__send_names(ID mid, VALUE klass)
 {
   if (!rbtracer.mid_tbl)
     rbtracer.mid_tbl = st_init_numtable();
 
   if (!st_is_member(rbtracer.mid_tbl, mid)) {
     st_insert(rbtracer.mid_tbl, (st_data_t)mid, (st_data_t)1);
-    SEND_EVENT(2,
+    rbtrace__send_event(2,
       "mid",
       'l', mid,
       's', rb_id2name(mid)
@@ -250,7 +250,7 @@ SEND_NAMES(ID mid, VALUE klass)
 
   if (!st_is_member(rbtracer.klass_tbl, klass)) {
     st_insert(rbtracer.klass_tbl, (st_data_t)klass, (st_data_t)1);
-    SEND_EVENT(2,
+    rbtrace__send_event(2,
       "klass",
       'l', klass,
       's', rb_class2name(klass)
@@ -321,8 +321,8 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
     }
 
     if (diff > rbtracer.threshold * 1e3) {
-      SEND_NAMES(mid, singleton ? self : klass);
-      SEND_EVENT(6,
+      rbtrace__send_names(mid, singleton ? self : klass);
+      rbtrace__send_event(6,
         event == RUBY_EVENT_RETURN ? "slow" : "cslow",
         't', rbtracer.call_times[ rbtracer.num_calls ],
         'u', diff,
@@ -365,8 +365,8 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
   switch (event) {
     case RUBY_EVENT_CALL:
     case RUBY_EVENT_C_CALL:
-      SEND_NAMES(mid, singleton ? self : klass);
-      SEND_EVENT(5,
+      rbtrace__send_names(mid, singleton ? self : klass);
+      rbtrace__send_event(5,
         event == RUBY_EVENT_CALL ? "call" : "ccall",
         'n',
         'd', tracer ? tracer->id : 255, // hax
@@ -404,7 +404,7 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
           }
 
           if (result && *result) {
-            SEND_EVENT(3,
+            rbtrace__send_event(3,
               "exprval",
               'd', tracer->id,
               'd', i,
@@ -417,7 +417,7 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
 
     case RUBY_EVENT_RETURN:
     case RUBY_EVENT_C_RETURN:
-      SEND_EVENT(2,
+      rbtrace__send_event(2,
         event == RUBY_EVENT_RETURN ? "return" : "creturn",
         'n',
         'd', tracer ? tracer->id : 255 // hax
@@ -496,7 +496,7 @@ rbtracer_remove(char *query, int id)
   }
 
 out:
-  SEND_EVENT(2,
+  rbtrace__send_event(2,
     "remove",
     'd', tracer_id,
     's', query
@@ -589,7 +589,7 @@ rbtracer_add(char *query)
   rbtracer.num++;
 
 out:
-  SEND_EVENT(2,
+  rbtrace__send_event(2,
     "add",
     'd', tracer_id,
     's', query
@@ -617,7 +617,7 @@ rbtracer_add_expr(int id, char *expr)
   }
 
 out:
-  SEND_EVENT(3,
+  rbtrace__send_event(3,
     "newexpr",
     'd', tracer_id,
     'd', expr_id,
@@ -752,13 +752,13 @@ sigurg(int signal)
         if (pid && rbtracer.attached_pid == 0)
           rbtracer.attached_pid = pid;
 
-        SEND_EVENT(1,
+        rbtrace__send_event(1,
           "attached",
           'u', (uint32_t) rbtracer.attached_pid
         );
 
       } else if (0 == strncmp("detach", str.ptr, str.size)) {
-        SEND_EVENT(1,
+        rbtrace__send_event(1,
           "detached",
           'u', (uint32_t) rbtracer.attached_pid
         );
@@ -812,7 +812,7 @@ static void
 rbtrace_gc_mark()
 {
   if (rbtracer.gc && !in_event_hook) {
-    SEND_EVENT(1,
+    rbtrace__send_event(1,
       "gc",
       'n'
     );
