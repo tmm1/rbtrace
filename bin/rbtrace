@@ -342,9 +342,9 @@ class RBTracer
 
     case event
     when 'attached'
-      tracer_pid = *cmd
+      tracer_pid, = *cmd
       if tracer_pid != Process.pid
-        STDERR.puts "*** process #{pid} is already being traced"
+        STDERR.puts "*** process #{pid} is already being traced (#{tracer_pid} != #{Process.pid})"
         exit!(-1)
       end
 
@@ -352,7 +352,7 @@ class RBTracer
       return
 
     when 'detached'
-      tracer_pid = *cmd
+      tracer_pid, = *cmd
       if tracer_pid != Process.pid
         STDERR.puts "*** process #{pid} detached #{tracer_pid}, but we are #{Process.pid}"
       else
