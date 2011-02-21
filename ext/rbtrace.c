@@ -132,6 +132,10 @@ rbtracer = {
   .msgpacker = NULL
 };
 
+static void
+  msgq_teardown(),
+  rbtracer_detach();
+
 static inline void
 rbtrace__send_event(int nargs, const char *name, ...)
 {
@@ -228,7 +232,12 @@ rbtrace__send_event(int nargs, const char *name, ...)
   for (n=0; n<10 && ret==-1; n++)
     ret = msgsnd(rbtracer.mqo_id, &msg, sizeof(msg)-sizeof(long), IPC_NOWAIT);
 
-  if (ret == -1 && rbtracer.mqo_id != -1 && errno != EINVAL) {
+  if (ret == -1 && errno == EINVAL) {
+    fprintf(stderr, "msgsnd(%d): %s [detaching]\n", rbtracer.mqo_id, strerror(errno));
+
+    msgq_teardown();
+    rbtracer_detach();
+  } else if (ret == -1) {
     fprintf(stderr, "msgsnd(%d): %s\n", rbtracer.mqo_id, strerror(errno));
 
     struct msqid_ds stat;
@@ -537,6 +546,8 @@ out:
 static void
 rbtracer_detach()
 {
+  rbtracer.attached_pid = 0;
+
   rbtracer.firehose = false;
   rbtracer.slow = false;
   rbtracer.gc = false;
@@ -831,7 +842,6 @@ sigurg(int signal)
           );
         }
 
-        rbtracer.attached_pid = 0;
         rbtracer_detach();
 
       } else if (0 == strncmp("watch", str.ptr, str.size)) {

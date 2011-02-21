@@ -269,6 +269,8 @@ class RBTracer
   rescue Errno::EINVAL, Errno::EIDRM
     puts
     STDERR.puts "*** process #{pid} is gone"
+    STDERR.puts "*** #{$!.inspect}"
+    STDERR.puts $!.backtrace.join("\n  ")
   rescue Interrupt, SignalException
     retry
   end
