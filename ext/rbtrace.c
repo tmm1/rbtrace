@@ -57,8 +57,12 @@ timeofday_usec()
 
 typedef struct {
   int id;
-
   char *query;
+
+  char *klass_name;
+  size_t klass_len;
+  bool is_singleton;
+
   VALUE self;
   VALUE klass;
   ID mid;
@@ -79,6 +83,7 @@ static struct {
   pid_t attached_pid;
 
   bool installed;
+  bool devmode;
 
   bool gc;
   bool firehose;
@@ -106,6 +111,7 @@ rbtracer = {
   .attached_pid = 0,
 
   .installed = false,
+  .devmode = false,
 
   .gc = false,
   .firehose = false,
@@ -259,35 +265,6 @@ rbtrace__send_names(ID mid, VALUE klass)
   }
 }
 
-static void
-rbtracer__resolve_query(char *query, VALUE *klass, VALUE *self, ID *mid)
-{
-  char *idx = NULL, *method = NULL;
-
-  assert(klass && self && mid);
-  *klass = *self = *mid = 0;
-
-  if (NULL != (idx = rindex(query, '.'))) {
-    *idx = 0;
-    *self = rb_eval_string_protect(query, 0);
-    *idx = '.';
-
-    method = idx+1;
-  } else if (NULL != (idx = rindex(query, '#'))) {
-    *idx = 0;
-    *klass = rb_eval_string_protect(query, 0);
-    *idx = '#';
-
-    method = idx+1;
-  } else {
-    method = query;
-  }
-
-  if (method && *method) {
-    *mid = rb_intern(method);
-  }
-}
-
 static int in_event_hook = 0;
 
 static void
@@ -340,12 +317,23 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
       if (curr->query) {
         n++;
 
-        if ((!curr->mid   || curr->mid == mid) &&
-            (!curr->klass || curr->klass == klass) &&
-            (!curr->self  || curr->self == self))
-        {
-          tracer = curr;
-          break;
+        if (rbtracer.devmode) {
+          if ((!curr->mid        || curr->mid == mid) &&
+              (!curr->klass_name || (
+                (singleton == curr->is_singleton) &&
+                (0 == strncmp(rb_class2name(singleton ? self : klass), curr->klass_name, curr->klass_len)))))
+          {
+            tracer = curr;
+            break;
+          }
+        } else {
+          if ((!curr->mid   || curr->mid == mid) &&
+              (!curr->klass || curr->klass == klass) &&
+              (!curr->self  || curr->self == self))
+          {
+            tracer = curr;
+            break;
+          }
         }
       }
     }
@@ -552,6 +540,7 @@ rbtracer_detach()
   rbtracer.firehose = false;
   rbtracer.slow = false;
   rbtracer.gc = false;
+  rbtracer.devmode = false;
 
   int i;
   for (i=0; i<MAX_TRACERS; i++) {
@@ -587,22 +576,78 @@ rbtracer_add(char *query)
   }
   if (!tracer) goto out;
 
-  VALUE klass = 0, self = 0;
+  size_t
+    klass_begin = 0,
+    klass_end = 0;
+
+  bool is_singleton = false;
+
+  VALUE
+    klass = 0,
+    self = 0;
+
   ID mid = 0;
 
-  rbtracer__resolve_query(query, &klass, &self, &mid);
+  { // resolve query into its parts
+    char
+      *idx = NULL,
+      *method = NULL;
 
-  if (!mid && !klass && !self)
-    goto out;
+    if (NULL != (idx = rindex(query, '.'))) {
+      klass_begin = 0;
+      klass_end = idx - query;
+      is_singleton = true;
+
+      *idx = 0;
+      if (!rbtracer.devmode)
+        self = rb_eval_string_protect(query, 0);
+      *idx = '.';
+
+      method = idx+1;
+
+    } else if (NULL != (idx = rindex(query, '#'))) {
+      klass_begin = 0;
+      klass_end = idx - query;
+      is_singleton = false;
+
+      *idx = 0;
+      if (!rbtracer.devmode)
+        klass = rb_eval_string_protect(query, 0);
+      *idx = '#';
+
+      method = idx+1;
+
+    } else {
+      method = query;
+    }
+
+    if (method && *method) {
+      mid = rb_intern(method);
+    }
+  }
+
+  if (rbtracer.devmode) {
+    if (!mid && (klass_begin == klass_end))
+      goto out;
+  } else {
+    if (!mid && !klass && !self)
+      goto out;
+  }
 
   memset(tracer, 0, sizeof(*tracer));
 
   tracer->id = tracer_id;
+  tracer->query = strdup(query);
+
+  if (klass_end != klass_begin) {
+    tracer->klass_name = tracer->query + klass_begin;
+    tracer->klass_len = klass_end - klass_begin;
+  }
+  tracer->is_singleton = is_singleton;
+
   tracer->self = self;
   tracer->klass = klass;
   tracer->mid = mid;
-  tracer->query = strdup(query);
-  tracer->num_exprs = 0;
 
   if (rbtracer.num == 0)
     event_hook_install();
@@ -825,6 +870,9 @@ sigurg(int signal)
 
       } else if (0 == strncmp("gc", str.ptr, str.size)) {
         rbtracer.gc = true;
+
+      } else if (0 == strncmp("devmode", str.ptr, str.size)) {
+        rbtracer.devmode = true;
 
       }
     }

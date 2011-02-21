@@ -194,6 +194,13 @@ class RBTracer
     send_cmd(:firehose)
   end
 
+  # Turn on dev mode.
+  #
+  # Returns nothing.
+  def devmode
+    send_cmd(:devmode)
+  end
+
   # Turn on GC tracing.
   #
   # Returns nothing.
@@ -653,6 +660,9 @@ EOS
         "config file",
         :type => :strings,
         :short => '-c'
+
+      opt :devmode,
+        "assume the ruby process is reloading classes and methods"
     end
 
     opts = Trollop.with_standard_exception_handling(parser) do
@@ -750,6 +760,10 @@ EOS
         tracer = RBTracer.new(tracee)
       rescue ArgumentError => e
         parser.die :pid, "(#{e.message})"
+      end
+
+      if opts[:devmode_given]
+        tracer.devmode
       end
 
       if opts[:gc_given]

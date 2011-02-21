@@ -30,6 +30,7 @@ trace() {
   echo
 }
 
+trace -m Test.run --devmode
 trace -m sleep
 trace -m sleep Dir.chdir Dir.pwd Process.pid "String#gsub" "String#*"
 trace -m "Kernel#"
