@@ -264,8 +264,10 @@ rbtrace__send_names(ID mid, VALUE klass)
   if (!rbtracer.klass_tbl)
     rbtracer.klass_tbl = st_init_numtable();
 
-  if (!st_is_member(rbtracer.klass_tbl, klass)) {
-    st_insert(rbtracer.klass_tbl, (st_data_t)klass, (st_data_t)1);
+  if (rbtracer.devmode || !st_is_member(rbtracer.klass_tbl, klass)) {
+    if (!rbtracer.devmode)
+      st_insert(rbtracer.klass_tbl, (st_data_t)klass, (st_data_t)1);
+
     rbtrace__send_event(2,
       "klass",
       'l', klass,
