@@ -731,12 +731,14 @@ rbtracer_unwatch()
 static void
 msgq_teardown()
 {
-  if (rbtracer.mqo_id != -1) {
+  pid_t pid = getpid();
+
+  if (rbtracer.mqo_id != -1 && rbtracer.mqo_key == (key_t)pid) {
     msgctl(rbtracer.mqo_id, IPC_RMID, NULL);
     rbtracer.mqo_id = -1;
     rbtracer.mqo_key = 0;
   }
-  if (rbtracer.mqi_id != -1) {
+  if (rbtracer.mqi_id != -1 && rbtracer.mqi_key == (key_t)-pid) {
     msgctl(rbtracer.mqi_id, IPC_RMID, NULL);
     rbtracer.mqi_id = -1;
     rbtracer.mqi_key = 0;
