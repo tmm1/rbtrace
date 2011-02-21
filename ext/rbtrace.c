@@ -547,7 +547,7 @@ out:
 }
 
 static void
-rbtracer_remove_all()
+rbtracer_detach()
 {
   rbtracer.firehose = false;
   rbtracer.slow = false;
@@ -784,10 +784,10 @@ sigurg(int signal)
             "detached",
             'u', (uint32_t) rbtracer.attached_pid
           );
-
-          rbtracer.attached_pid = 0;
-          rbtracer_remove_all();
         }
+
+        rbtracer.attached_pid = 0;
+        rbtracer_detach();
 
       } else if (0 == strncmp("watch", str.ptr, str.size)) {
         if (ary.size != 2 ||
