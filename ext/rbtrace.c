@@ -160,38 +160,38 @@ rbtrace__send_event(int nargs, const char *name, ...)
     for (n=0; n<nargs; n++) {
       type = va_arg(ap, int);
       switch (type) {
-        case 't':
-          uint64 = va_arg(ap, uint64_t);
-          msgpack_pack_uint64(pk, uint64);
-          break;
-
-        case 'n':
-          msgpack_pack_uint64(pk, timeofday_usec());
-          break;
-
-        case 'b':
+        case 'b': // boolean
           if (va_arg(ap, int))
             msgpack_pack_true(pk);
           else
             msgpack_pack_false(pk);
           break;
 
-        case 'u':
-          uint = va_arg(ap, uint32_t);
-          msgpack_pack_uint32(pk, uint);
-          break;
-
-        case 'l':
-          ulong = va_arg(ap, unsigned long);
-          msgpack_pack_unsigned_long(pk, ulong);
-          break;
-
-        case 'd':
+        case 'd': // signed int
           sint = va_arg(ap, int);
           msgpack_pack_int(pk, sint);
           break;
 
-        case 's':
+        case 'u': // unsigned int
+          uint = va_arg(ap, uint32_t);
+          msgpack_pack_uint32(pk, uint);
+          break;
+
+        case 'l': // unsigned long (VALUE/ID)
+          ulong = va_arg(ap, unsigned long);
+          msgpack_pack_unsigned_long(pk, ulong);
+          break;
+
+        case 't': // unsigned long long (timestamps)
+          uint64 = va_arg(ap, uint64_t);
+          msgpack_pack_uint64(pk, uint64);
+          break;
+
+        case 'n': // current timestamp
+          msgpack_pack_uint64(pk, timeofday_usec());
+          break;
+
+        case 's': // string
           str = va_arg(ap, char *);
           if (!str)
             str = (char *)"";
