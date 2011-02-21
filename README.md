@@ -191,8 +191,5 @@ for popular ruby libraries and functions.
 * add special expressions for method args (_arg0_, _arguments_)
 * optimize local variable lookup to avoid instance_eval
 * run process via bin/rbtrace (to trace rubygems and bootup time)
-* let bin/rbtrace attach to multiple pids
-  * how to select on multiple msgrcv() targets?
-  * prefix pid to output in multiple pid mode
 * investigate mach_msg on osx since msgget(2) has hard kernel limits
 

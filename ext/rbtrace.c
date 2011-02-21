@@ -779,13 +779,15 @@ sigurg(int signal)
         );
 
       } else if (0 == strncmp("detach", str.ptr, str.size)) {
-        rbtrace__send_event(1,
-          "detached",
-          'u', (uint32_t) rbtracer.attached_pid
-        );
+        if (rbtracer.attached_pid) {
+          rbtrace__send_event(1,
+            "detached",
+            'u', (uint32_t) rbtracer.attached_pid
+          );
 
-        rbtracer.attached_pid = 0;
-        rbtracer_remove_all();
+          rbtracer.attached_pid = 0;
+          rbtracer_remove_all();
+        }
 
       } else if (0 == strncmp("watch", str.ptr, str.size)) {
         if (ary.size != 2 ||

@@ -262,6 +262,8 @@ class RBTracer
   rescue Errno::EINVAL, Errno::EIDRM
     puts
     STDERR.puts "*** process #{pid} is gone"
+  rescue Interrupt, SignalException
+    retry
   end
 
   # Process events from the traced process.
@@ -604,7 +606,7 @@ All Options:\n
 EOS
       opt :pid,
         "pid of the ruby process to trace",
-        :type => :int,
+        :type => :ints,
         :short => '-p'
 
       opt :firehose,
@@ -664,11 +666,6 @@ EOS
       exit(-1)
     end
 
-    if out = opts[:output]
-      output = File.open(out, opts[:append] ? 'a+' : 'w')
-      output.sync = true
-    end
-
     methods = []
 
     if opts[:methods_given]
@@ -696,9 +693,61 @@ EOS
       end
     end
 
+    tracee = nil
+
+    if opts[:pid].size <= 1
+      tracee = opts[:pid].first
+
+    else
+      tracers = []
+
+      opts[:pid].each do |pid|
+        if child = fork
+          tracers << child
+        else
+          Process.setpgrp
+          STDIN.reopen '/dev/null'
+          $0 = "rbtrace -p #{pid} (parent: #{Process.ppid})"
+
+          opts[:output] += ".#{pid}" if opts[:output]
+          tracee = pid
+
+          # fall through and start tracing
+          break
+        end
+      end
+
+      if tracee.nil?
+        # this is the parent
+        while true
+          begin
+            break if tracers.empty?
+            if pid = Process.wait
+              tracers.delete(pid)
+            end
+          rescue Interrupt, SignalException
+            STDERR.puts "*** waiting on child tracers: #{tracers.inspect}"
+            tracers.each do |pid|
+              begin
+                Process.kill 'INT', pid
+              rescue Errno::ESRCH
+              end
+            end
+          end
+        end
+
+        exit!
+      end
+    end
+
+    if out = opts[:output]
+      output = File.open(out, opts[:append] ? 'a+' : 'w')
+      output.sync = true
+    end
+
     begin
       begin
-        tracer = RBTracer.new(opts[:pid])
+        tracer = RBTracer.new(tracee)
       rescue ArgumentError => e
         parser.die :pid, "(#{e.message})"
       end
@@ -729,7 +778,7 @@ EOS
 
       begin
         tracer.recv_loop
-      rescue Interrupt
+      rescue Interrupt, SignalException
       end
     ensure
       if tracer
