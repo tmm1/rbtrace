@@ -923,6 +923,13 @@ sigurg(int signal)
   msgq_setup();
   if (rbtracer.mqi_id == -1) return;
 
+#ifdef HAVE_RB_DURING_GC
+  if (rb_during_gc()) {
+    rbtrace__send_event(0, "during_gc");
+    return;
+  }
+#endif
+
   event_msg_t msg;
   int n = 0;
 

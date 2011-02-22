@@ -35,6 +35,8 @@ unless have_library('msgpackc_ext') and have_header('msgpack.h')
   raise 'msgpack build failed'
 end
 
+have_func('rb_during_gc', 'ruby.h')
+
 # increase message size on linux
 if RUBY_PLATFORM =~ /linux/
   $defs.push("-DBUF_SIZE=256")

@@ -142,7 +142,7 @@ class RBTracer
       raise ArgumentError, 'could not signal process, are you running as root?'
     end
 
-    Process.kill 'URG', @pid
+    signal
     sleep 0.25 # wait for process to create msgqs
 
     @qi = MsgQ.msgget( pid, 0666)
@@ -339,6 +339,10 @@ class RBTracer
 
   private
 
+  def signal
+    Process.kill 'URG', @pid
+  end
+
   # Process incoming events until either a timeout or a condition becomes true.
   #
   # time - The Fixnum timeout in seconds.
@@ -372,7 +376,7 @@ class RBTracer
     rescue Errno::EINTR
       retry
     end
-    Process.kill 'URG', @pid
+    signal
     recv_lines
   end
 
@@ -416,6 +420,11 @@ class RBTracer
     event = cmd.shift
 
     case event
+    when 'during_gc'
+      sleep 0.01
+      signal
+      return
+
     when 'attached'
       tracer_pid, = *cmd
       if tracer_pid != Process.pid
