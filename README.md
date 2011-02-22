@@ -17,10 +17,6 @@ in production.
 
 rbtrace has several different tracing modes.
 
-**note**: `--firehose` is not reliable on osx.
-
-**note**: `--slow`, `--gc` and `--methods` can be combined.
-
 ### firehose: show everything
 
     % rbtrace -p <PID> --firehose
@@ -36,6 +32,12 @@ rbtrace has several different tracing modes.
 ### gc: trace garbage collections
 
     % rbtrace -p <PID> --gc
+
+### notes
+
+`--firehose` is not reliable on osx.
+
+`--slow`, `--gc` and `--methods` can be combined.
 
 ## predefined tracers
 
