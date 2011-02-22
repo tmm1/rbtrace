@@ -21,7 +21,6 @@
 
 #ifndef RUBY_VM
 #include <env.h>
-#include <intern.h>
 #include <node.h>
 #include <st.h>
 #define rb_sourcefile() (ruby_current_node ? ruby_current_node->nd_file : 0)
