@@ -15,7 +15,11 @@ in production.
 
 ## tracer types
 
-rbtrace has several different tracing modes:
+rbtrace has several different tracing modes.
+
+**note**: `--firehose` is not reliable on osx.
+
+**note**: `--slow`, `--gc` and `--methods` can be combined.
 
 ### firehose: show everything
 
