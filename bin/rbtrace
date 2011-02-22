@@ -257,17 +257,17 @@ class RBTracer
     rescue Errno::ESRCH
     end
 
-    puts
+    newline
 
     if wait_for{ @attached == false }
-      puts
+      newline
       STDERR.puts "*** detached from process #{pid}"
     else
-      puts
+      newline
       STDERR.puts "*** could not detach cleanly from process #{pid}"
     end
   rescue Errno::EINVAL, Errno::EIDRM
-    puts
+    newline
     STDERR.puts "*** process #{pid} is gone"
     STDERR.puts "*** #{$!.inspect}"
     STDERR.puts $!.backtrace.join("\n  ")
@@ -357,12 +357,19 @@ class RBTracer
     end
   end
 
-  def print(*args)
-    @out.print(*args)
+  def print(arg)
+    @printed_newline = false
+    @out.print(arg)
   end
 
-  def puts(*args)
-    @out.puts(*args)
+  def puts(arg=nil)
+    @printed_newline = true
+    arg ? @out.puts(arg) : @out.puts
+  end
+
+  def newline
+    puts unless @printed_newline
+    @printed_newline = true
   end
 
   def parse_cmd(line)
