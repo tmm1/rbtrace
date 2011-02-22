@@ -207,8 +207,11 @@ class RBTracer
   # Returns a Fixnum pid.
   def fork
     send_cmd(:fork)
-    wait_for(30){ !!@forked_pid }
-    @forked_pid
+    if wait_for(30, 'for fork'){ !!@forked_pid }
+      @forked_pid
+    else
+      STDERR.puts '*** timed out waiting for fork'
+    end
   end
 
   # Turn on GC tracing.
@@ -320,7 +323,7 @@ class RBTracer
   # block - The Block that is checked every 50ms until it returns true.
   #
   # Returns true when the condition was met, or false on a timeout.
-  def wait_for(time=5)
+  def wait_for(time=5, reason='to detach cleanly')
     wait = 0.05 # polling interval
 
     (time/wait).to_i.times do
@@ -331,7 +334,7 @@ class RBTracer
 
         return true if yield
       rescue Interrupt
-        STDERR.puts "*** waiting to detach cleanly (#{time.to_i}s left)"
+        STDERR.puts "*** waiting #{reason} (#{time.to_i}s left)"
         retry
       end
     end
