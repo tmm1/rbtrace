@@ -767,9 +767,135 @@ msgq_setup()
 }
 
 static void
+rbtrace__process_event(msgpack_object cmd)
+{
+  if (cmd.type != MSGPACK_OBJECT_ARRAY)
+    return;
+
+  static int last_tracer_id = -1; // hax
+  char query[BUF_SIZE];
+
+  msgpack_object_array ary;
+  msgpack_object_raw str;
+
+  /* fprintf(stderr, "GOT: ");*/
+  /* msgpack_object_print(stderr, cmd);*/
+  /* fprintf(stderr, "\n");*/
+
+  ary = cmd.via.array;
+
+  if (ary.size < 1 ||
+      ary.ptr[0].type != MSGPACK_OBJECT_RAW)
+    return;
+
+  str = ary.ptr[0].via.raw;
+
+  if (0 == strncmp("attach", str.ptr, str.size)) {
+    if (ary.size != 2 ||
+        ary.ptr[1].type != MSGPACK_OBJECT_POSITIVE_INTEGER)
+      return;
+
+    pid_t pid = (pid_t) ary.ptr[1].via.u64;
+
+    if (pid && rbtracer.attached_pid == 0)
+      rbtracer.attached_pid = pid;
+
+    rbtrace__send_event(1,
+        "attached",
+        'u', (uint32_t) rbtracer.attached_pid
+        );
+
+  } else if (0 == strncmp("detach", str.ptr, str.size)) {
+    if (rbtracer.attached_pid) {
+      rbtrace__send_event(1,
+          "detached",
+          'u', (uint32_t) rbtracer.attached_pid
+          );
+    }
+
+    rbtracer_detach();
+
+  } else if (0 == strncmp("watch", str.ptr, str.size)) {
+    if (ary.size != 2 ||
+        ary.ptr[1].type != MSGPACK_OBJECT_POSITIVE_INTEGER)
+      return;
+
+    unsigned int msec = ary.ptr[1].via.u64;
+    rbtracer_watch(msec);
+
+  } else if (0 == strncmp("firehose", str.ptr, str.size)) {
+    rbtracer.firehose = true;
+    event_hook_install();
+
+  } else if (0 == strncmp("add", str.ptr, str.size)) {
+    if (ary.size != 2 ||
+        ary.ptr[1].type != MSGPACK_OBJECT_RAW)
+      return;
+
+    str = ary.ptr[1].via.raw;
+
+    strncpy(query, str.ptr, str.size);
+    query[str.size] = 0;
+    last_tracer_id = rbtracer_add(query);
+
+  } else if (0 == strncmp("addexpr", str.ptr, str.size)) {
+    if (ary.size != 2 ||
+        ary.ptr[1].type != MSGPACK_OBJECT_RAW)
+      return;
+
+    str = ary.ptr[1].via.raw;
+
+    strncpy(query, str.ptr, str.size);
+    query[str.size] = 0;
+    rbtracer_add_expr(last_tracer_id, query);
+
+  } else if (0 == strncmp("gc", str.ptr, str.size)) {
+    rbtracer.gc = true;
+
+  } else if (0 == strncmp("devmode", str.ptr, str.size)) {
+    rbtracer.devmode = true;
+
+  } else if (0 == strncmp("fork", str.ptr, str.size)) {
+    pid_t outer = fork();
+
+    if (outer == 0) {
+      rb_eval_string_protect("$0 = \"[DEBUG] #{Process.ppid}\"", 0);
+      setpgrp();
+      pid_t inner = fork();
+
+      if (inner == 0) {
+        // a ruby process will never have more than 20k
+        // open file descriptors, right?
+        int fd;
+        for (fd=3; fd<20000; fd++)
+          close(fd);
+
+        // busy loop
+        while (1) sleep(1);
+
+        // don't return to ruby
+        _exit(0);
+      }
+
+      rbtrace__send_event(1,
+          "forked",
+          inner == -1 ? 'b' : 'u',
+          inner == -1 ? false : (uint32_t) inner
+          );
+
+      // kill off outer fork
+      _exit(0);
+    }
+
+    if (outer != -1) {
+      waitpid(outer, NULL, 0);
+    }
+  }
+}
+
+static void
 sigurg(int signal)
 {
-  static int last_tracer_id = -1; // hax
   msgq_setup();
   if (rbtracer.mqi_id == -1) return;
 
@@ -785,134 +911,13 @@ sigurg(int signal)
     if (ret == -1) {
       break;
     } else {
-      char query[sizeof(msg.buf)];
-
-      msgpack_object cmd;
-      msgpack_object_array ary;
-      msgpack_object_raw str;
-
       msgpack_unpacked unpacked;
       msgpack_unpacked_init(&unpacked);
 
       bool success = msgpack_unpack_next(&unpacked, msg.buf, sizeof(msg.buf), NULL);
-      cmd = unpacked.data;
+      if (!success) continue;
 
-      if (!success || cmd.type != MSGPACK_OBJECT_ARRAY)
-        continue;
-
-      /* fprintf(stderr, "GOT: ");*/
-      /* msgpack_object_print(stderr, cmd);*/
-      /* fprintf(stderr, "\n");*/
-
-      ary = cmd.via.array;
-
-      if (ary.size < 1 ||
-          ary.ptr[0].type != MSGPACK_OBJECT_RAW)
-        continue;
-
-      str = ary.ptr[0].via.raw;
-
-      if (0 == strncmp("attach", str.ptr, str.size)) {
-        if (ary.size != 2 ||
-            ary.ptr[1].type != MSGPACK_OBJECT_POSITIVE_INTEGER)
-          continue;
-
-        pid_t pid = (pid_t) ary.ptr[1].via.u64;
-
-        if (pid && rbtracer.attached_pid == 0)
-          rbtracer.attached_pid = pid;
-
-        rbtrace__send_event(1,
-          "attached",
-          'u', (uint32_t) rbtracer.attached_pid
-        );
-
-      } else if (0 == strncmp("detach", str.ptr, str.size)) {
-        if (rbtracer.attached_pid) {
-          rbtrace__send_event(1,
-            "detached",
-            'u', (uint32_t) rbtracer.attached_pid
-          );
-        }
-
-        rbtracer_detach();
-
-      } else if (0 == strncmp("watch", str.ptr, str.size)) {
-        if (ary.size != 2 ||
-            ary.ptr[1].type != MSGPACK_OBJECT_POSITIVE_INTEGER)
-          continue;
-
-        unsigned int msec = ary.ptr[1].via.u64;
-        rbtracer_watch(msec);
-
-      } else if (0 == strncmp("firehose", str.ptr, str.size)) {
-        rbtracer.firehose = true;
-        event_hook_install();
-
-      } else if (0 == strncmp("add", str.ptr, str.size)) {
-        if (ary.size != 2 ||
-            ary.ptr[1].type != MSGPACK_OBJECT_RAW)
-          continue;
-
-        str = ary.ptr[1].via.raw;
-
-        strncpy(query, str.ptr, str.size);
-        query[str.size] = 0;
-        last_tracer_id = rbtracer_add(query);
-
-      } else if (0 == strncmp("addexpr", str.ptr, str.size)) {
-        if (ary.size != 2 ||
-            ary.ptr[1].type != MSGPACK_OBJECT_RAW)
-          continue;
-
-        str = ary.ptr[1].via.raw;
-
-        strncpy(query, str.ptr, str.size);
-        query[str.size] = 0;
-        rbtracer_add_expr(last_tracer_id, query);
-
-      } else if (0 == strncmp("gc", str.ptr, str.size)) {
-        rbtracer.gc = true;
-
-      } else if (0 == strncmp("devmode", str.ptr, str.size)) {
-        rbtracer.devmode = true;
-
-      } else if (0 == strncmp("fork", str.ptr, str.size)) {
-        pid_t outer = fork();
-
-        if (outer == 0) {
-          rb_eval_string_protect("$0 = \"[DEBUG] #{Process.ppid}\"", 0);
-          setpgrp();
-          pid_t inner = fork();
-
-          if (inner == 0) {
-            // a ruby process will never have more than 20k
-            // open file descriptors, right?
-            int fd;
-            for (fd=3; fd<20000; fd++)
-              close(fd);
-
-            // busy loop
-            while (1) sleep(1);
-
-            // don't return to ruby
-            _exit(0);
-          }
-
-          rbtrace__send_event(1,
-            "forked",
-            inner == -1 ? 'b' : 'u',
-            inner == -1 ? false : (uint32_t) inner
-          );
-
-          // kill off outer fork
-          _exit(0);
-        }
-
-        if (outer != -1) {
-          waitpid(outer, NULL, 0);
-        }
-      }
+      rbtrace__process_event(unpacked.data);
     }
   }
 }
