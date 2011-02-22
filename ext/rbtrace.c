@@ -27,9 +27,6 @@
 #define rb_sourceline() (ruby_current_node ? nd_line(ruby_current_node) : 0)
 #else
 #include <ruby/st.h>
-// this is a nasty hack, and will probably break on anything except 1.9.2p136
-int rb_thread_method_id_and_class(void *th, ID *idp, VALUE *klassp);
-RUBY_EXTERN void *ruby_current_thread;
 #endif
 
 #ifndef RSTRING_PTR
@@ -293,11 +290,10 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
   if (mid == ID_ALLOCATOR) goto out;
 
 #ifdef RUBY_VM
-  // some serious 1.9.2 hax
-  if (mid == 0 && ruby_current_thread) {
+  if (mid == 0) {
     ID _mid;
     VALUE _klass;
-    rb_thread_method_id_and_class(ruby_current_thread, &_mid, &_klass);
+    rb_frame_method_id_and_class(&_mid, &_klass);
 
     mid = _mid;
     klass = _klass;
@@ -305,12 +301,20 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
 #endif
 
   // normalize klass and check for class-level methods
-  bool singleton = 0;
+  bool singleton = false;
   if (klass) {
     if (TYPE(klass) == T_ICLASS) {
       klass = RBASIC(klass)->klass;
     }
+
     singleton = FL_TEST(klass, FL_SINGLETON);
+
+#ifdef RUBY_VM
+    if (singleton &&
+        !(TYPE(self) == T_CLASS ||
+          TYPE(self) == T_MODULE))
+      singleton = false;
+#endif
   }
 
   rbtracer_t *tracer = NULL;

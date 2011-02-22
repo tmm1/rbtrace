@@ -43,6 +43,8 @@ module MsgQ
     end
 
     def self.recv_cmd(q, block=true)
+      MsgQ.enable_interrupt  if RUBY_VERSION > '1.9'
+
       msg = EventMsg.new
       ret = MsgQ.msgrcv(q, msg, BUF_SIZE, 0, block ? 0 : IPC_NOWAIT)
       if ret == -1
@@ -54,6 +56,23 @@ module MsgQ
       end
 
       msg[:buf].to_ptr.read_string_length(BUF_SIZE)
+    ensure
+      MsgQ.disable_interrupt if RUBY_VERSION > '1.9'
+    end
+  end
+
+  if RUBY_VERSION > '1.9'
+    require 'fiddle'
+
+    handle = DL::Handle.new
+    @enable_interrupt  = Fiddle::Function.new(handle['rb_enable_interrupt'],  [], DL::TYPE_VOID)
+    @disable_interrupt = Fiddle::Function.new(handle['rb_disable_interrupt'], [], DL::TYPE_VOID)
+
+    def self.enable_interrupt
+      @enable_interrupt.call
+    end
+    def self.disable_interrupt
+      @disable_interrupt.call
     end
   end
 

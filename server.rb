@@ -24,6 +24,7 @@ while true
       'hello'.multiply_vowels(3){ :ohai }
       sleep rand*0.5
 
+      ENV['blah']
       GC.start
 
       reload_test.call
