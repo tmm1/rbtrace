@@ -775,6 +775,9 @@ rbtrace__process_event(msgpack_object cmd)
   static int last_tracer_id = -1; // hax
   char query[BUF_SIZE];
 
+  char code[BUF_SIZE+150];
+  VALUE val = Qnil;
+
   msgpack_object_array ary;
   msgpack_object_raw str;
 
@@ -890,6 +893,27 @@ rbtrace__process_event(msgpack_object cmd)
     if (outer != -1) {
       waitpid(outer, NULL, 0);
     }
+
+  } else if (0 == strncmp("eval", str.ptr, str.size)) {
+    if (ary.size != 2 ||
+        ary.ptr[1].type != MSGPACK_OBJECT_RAW)
+      return;
+
+    str = ary.ptr[1].via.raw;
+
+    strncpy(query, str.ptr, str.size);
+    query[str.size] = 0;
+
+    snprintf(code, BUF_SIZE+150, "(begin; %s; rescue Exception => e; e; end).inspect", query);
+    val = rb_eval_string_protect(code, 0);
+
+    if (TYPE(val) == T_STRING) {
+      rbtrace__send_event(1,
+        "evaled",
+        's', RSTRING_PTR(val)
+      );
+    }
+
   }
 }
 

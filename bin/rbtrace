@@ -214,6 +214,23 @@ class RBTracer
     end
   end
 
+  # Evaluate some ruby code.
+  #
+  # Returns the String result.
+  def eval(code)
+    if (err = valid_syntax?(code)) != true
+      raise ArgumentError, "#{err.class} for expression #{code.inspect}"
+    end
+
+    send_cmd(:eval, code)
+
+    if wait_for(10, 'for eval response'){ !!@eval_result }
+      @eval_result
+    else
+      STDERR.puts '*** timed out waiting for eval response'
+    end
+  end
+
   # Turn on GC tracing.
   #
   # Returns nothing.
@@ -315,6 +332,11 @@ class RBTracer
     end
   end
 
+  def puts(arg=nil)
+    @printed_newline = true
+    arg ? @out.puts(arg) : @out.puts
+  end
+
   private
 
   # Process incoming events until either a timeout or a condition becomes true.
@@ -364,7 +386,7 @@ class RBTracer
 
   def valid_syntax?(code)
     begin
-      eval("#{code}\nBEGIN {return true}", nil, 'rbtrace_expression', 0)
+      Kernel.eval("#{code}\nBEGIN {return true}", nil, 'rbtrace_expression', 0)
     rescue Exception => e
       e
     end
@@ -373,11 +395,6 @@ class RBTracer
   def print(arg)
     @printed_newline = false
     @out.print(arg)
-  end
-
-  def puts(arg=nil)
-    @printed_newline = true
-    arg ? @out.puts(arg) : @out.puts
   end
 
   def newline
@@ -429,6 +446,10 @@ class RBTracer
     when 'forked'
       pid, = *cmd
       @forked_pid = pid
+
+    when 'evaled'
+      res, = *cmd
+      @eval_result = res
 
     when 'mid'
       mid, name = *cmd
@@ -692,6 +713,11 @@ EOS
 
       opt :fork,
         "fork a copy of the process for debugging (so you can attach gdb.rb)"
+
+      opt :eval,
+        "evaluate a ruby expression in the process",
+        :type => String,
+        :short => '-e'
     end
 
     opts = Trollop.with_standard_exception_handling(parser) do
@@ -699,7 +725,7 @@ EOS
       parser.parse(ARGV)
     end
 
-    unless %w[ fork slow firehose methods config gc ].find{ |n| opts[:"#{n}_given"] }
+    unless %w[ fork eval slow firehose methods config gc ].find{ |n| opts[:"#{n}_given"] }
       $stderr.puts "Error: --slow, --gc, --firehose, --methods or --config required."
       $stderr.puts "Try --help for help."
       exit(-1)
@@ -798,6 +824,14 @@ EOS
       if opts[:fork_given]
         pid = tracer.fork
         STDERR.puts "*** forked off a busy looping copy at #{pid} (make sure to kill -9 it when you're done)"
+
+      elsif opts[:eval_given]
+        code = opts[:eval]
+        res = tracer.eval(code)
+
+        tracer.puts ">> #{code}"
+        tracer.puts "=> #{res}"
+
       else
         tracer.out = output if output
         tracer.prefix = ' ' * opts[:prefix]
