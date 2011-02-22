@@ -24,7 +24,7 @@ end
 
 module MsgQ
   extend FFI::Library
-  ffi_lib 'c'
+  ffi_lib FFI::CURRENT_PROCESS
 
   class EventMsg < FFI::Struct
     BUF_SIZE = RUBY_PLATFORM =~ /linux/ ? 256 : 120
@@ -43,7 +43,7 @@ module MsgQ
     end
 
     def self.recv_cmd(q, block=true)
-      MsgQ.enable_interrupt  if RUBY_VERSION > '1.9'
+      MsgQ.rb_enable_interrupt if RUBY_VERSION > '1.9'
 
       msg = EventMsg.new
       ret = MsgQ.msgrcv(q, msg, BUF_SIZE, 0, block ? 0 : IPC_NOWAIT)
@@ -57,28 +57,18 @@ module MsgQ
 
       msg[:buf].to_ptr.read_string_length(BUF_SIZE)
     ensure
-      MsgQ.disable_interrupt if RUBY_VERSION > '1.9'
-    end
-  end
-
-  if RUBY_VERSION > '1.9'
-    require 'fiddle'
-
-    handle = DL::Handle.new
-    @enable_interrupt  = Fiddle::Function.new(handle['rb_enable_interrupt'],  [], DL::TYPE_VOID)
-    @disable_interrupt = Fiddle::Function.new(handle['rb_disable_interrupt'], [], DL::TYPE_VOID)
-
-    def self.enable_interrupt
-      @enable_interrupt.call
-    end
-    def self.disable_interrupt
-      @disable_interrupt.call
+      MsgQ.rb_disable_interrupt if RUBY_VERSION > '1.9'
     end
   end
 
   attach_function :msgget, [:int, :int], :int
   attach_function :msgrcv, [:int, EventMsg.ptr, :size_t, :long, :int], :int
   attach_function :msgsnd, [:int, EventMsg.ptr, :size_t, :int], :int
+
+  if RUBY_VERSION > '1.9'
+    attach_function :rb_enable_interrupt,  [], :void
+    attach_function :rb_disable_interrupt, [], :void
+  end
 end
 
 class RBTracer
