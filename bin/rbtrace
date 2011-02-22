@@ -169,6 +169,7 @@ class RBTracer
 
     @out = STDOUT
     @prefix = '  '
+    @printed_newline = true
 
     @show_time = false
     @show_duration = true
