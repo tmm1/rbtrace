@@ -826,11 +826,10 @@ EOS
         STDERR.puts "*** forked off a busy looping copy at #{pid} (make sure to kill -9 it when you're done)"
 
       elsif opts[:eval_given]
-        code = opts[:eval]
-        res = tracer.eval(code)
-
-        tracer.puts ">> #{code}"
-        tracer.puts "=> #{res}"
+        if res = tracer.eval(code = opts[:eval])
+          tracer.puts ">> #{code}"
+          tracer.puts "=> #{res}"
+        end
 
       else
         tracer.out = output if output
