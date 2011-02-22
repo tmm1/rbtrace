@@ -1,0 +1,1 @@
+Mongo::DB#command(selector, opts)
