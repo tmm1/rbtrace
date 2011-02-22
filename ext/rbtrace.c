@@ -888,6 +888,41 @@ sigurg(int signal)
       } else if (0 == strncmp("devmode", str.ptr, str.size)) {
         rbtracer.devmode = true;
 
+      } else if (0 == strncmp("fork", str.ptr, str.size)) {
+        pid_t outer = fork();
+
+        if (outer == 0) {
+          rb_eval_string_protect("$0 = \"[DEBUG] #{Process.ppid}\"", 0);
+          setpgrp();
+          pid_t inner = fork();
+
+          if (inner == 0) {
+            // a ruby process will never have more than 20k
+            // open file descriptors, right?
+            int fd;
+            for (fd=3; fd<20000; fd++)
+              close(fd);
+
+            // busy loop
+            while (1) sleep(1);
+
+            // don't return to ruby
+            _exit(0);
+          }
+
+          rbtrace__send_event(1,
+            "forked",
+            inner == -1 ? 'b' : 'u',
+            inner == -1 ? false : (uint32_t) inner
+          );
+
+          // kill off outer fork
+          _exit(0);
+        }
+
+        if (outer != -1) {
+          waitpid(outer, NULL, 0);
+        }
       }
     }
   }

@@ -202,6 +202,15 @@ class RBTracer
     send_cmd(:devmode)
   end
 
+  # Fork the process and return the copy's pid.
+  #
+  # Returns a Fixnum pid.
+  def fork
+    send_cmd(:fork)
+    wait_for(30){ !!@forked_pid }
+    @forked_pid
+  end
+
   # Turn on GC tracing.
   #
   # Returns nothing.
@@ -414,6 +423,10 @@ class RBTracer
     end
 
     case event
+    when 'forked'
+      pid, = *cmd
+      @forked_pid = pid
+
     when 'mid'
       mid, name = *cmd
       @methods[mid] = name
@@ -673,6 +686,9 @@ EOS
 
       opt :devmode,
         "assume the ruby process is reloading classes and methods"
+
+      opt :fork,
+        "fork a copy of the process for debugging (so you can attach gdb.rb)"
     end
 
     opts = Trollop.with_standard_exception_handling(parser) do
@@ -680,10 +696,14 @@ EOS
       parser.parse(ARGV)
     end
 
-    unless %w[ slow firehose methods config gc ].find{ |n| opts[:"#{n}_given"] }
+    unless %w[ fork slow firehose methods config gc ].find{ |n| opts[:"#{n}_given"] }
       $stderr.puts "Error: --slow, --gc, --firehose, --methods or --config required."
       $stderr.puts "Try --help for help."
       exit(-1)
+    end
+
+    if opts[:fork_given] and opts[:pid].size != 1
+      parser.die :fork, '(can only be invoked with one pid)'
     end
 
     methods = []
@@ -772,37 +792,28 @@ EOS
         parser.die :pid, "(#{e.message})"
       end
 
-      if opts[:devmode_given]
-        tracer.devmode
-      end
-
-      if opts[:gc_given]
-        tracer.gc
-      end
-
-      if opts[:firehose_given]
-        tracer.firehose
+      if opts[:fork_given]
+        pid = tracer.fork
+        STDERR.puts "*** forked off a busy looping copy at #{pid} (make sure to kill -9 it when you're done)"
       else
-        if methods.any?
-          tracer.add(methods)
+        tracer.out = output if output
+        tracer.prefix = ' ' * opts[:prefix]
+        tracer.show_time = opts[:start_time]
+        tracer.show_duration = !opts[:no_duration]
+
+        tracer.devmode if opts[:devmode_given]
+        tracer.gc if opts[:gc_given]
+
+        if opts[:firehose_given]
+          tracer.firehose
+        else
+          tracer.add(methods)       if methods.any?
+          tracer.watch(opts[:slow]) if opts[:slow_given]
         end
-
-        if opts[:slow_given]
-          tracer.watch(opts[:slow])
+        begin
+          tracer.recv_loop
+        rescue Interrupt, SignalException
         end
-      end
-
-      if output
-        tracer.out = output
-      end
-
-      tracer.prefix = ' ' * opts[:prefix]
-      tracer.show_duration = !opts[:no_duration]
-      tracer.show_time = opts[:start_time]
-
-      begin
-        tracer.recv_loop
-      rescue Interrupt, SignalException
       end
     ensure
       if tracer
