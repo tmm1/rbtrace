@@ -718,17 +718,6 @@ rbtracer_watch(uint32_t threshold)
 }
 
 static void
-rbtracer_unwatch()
-{
-  if (rbtracer.slow) {
-    event_hook_remove();
-
-    rbtracer.firehose = false;
-    rbtracer.slow = false;
-  }
-}
-
-static void
 msgq_teardown()
 {
   pid_t pid = getpid();
