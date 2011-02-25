@@ -123,6 +123,9 @@ class RBTracer
   # Public: The IO where tracing output is written (default: STDOUT).
   attr_accessor :out
 
+  # Public: The timeout before giving up on attaching/detaching to a process.
+  attr_accessor :timeout
+
   # The String prefix used on nested method calls (default: ' ').
   attr_accessor :prefix
 
@@ -176,6 +179,8 @@ class RBTracer
     @max_nesting = @last_nesting = @nesting = 0
     @last_tracer = nil
 
+    @timeout = 5
+
     @out = STDOUT
     @out.sync = true
     @prefix = '  '
@@ -217,7 +222,7 @@ class RBTracer
   # Returns a Fixnum pid.
   def fork
     send_cmd(:fork)
-    if wait_for(30, 'for fork'){ !!@forked_pid }
+    if wait('for fork', 30){ !!@forked_pid }
       @forked_pid
     else
       STDERR.puts '*** timed out waiting for fork'
@@ -234,7 +239,7 @@ class RBTracer
 
     send_cmd(:eval, code)
 
-    if wait_for(10, 'for eval response'){ !!@eval_result }
+    if wait('for eval response', 15){ !!@eval_result }
       @eval_result
     else
       STDERR.puts '*** timed out waiting for eval response'
@@ -286,7 +291,7 @@ class RBTracer
   # Returns nothing.
   def attach
     send_cmd(:attach, Process.pid)
-    if wait_for{ @attached == true }
+    if wait('to attach'){ @attached == true }
       STDERR.puts "*** attached to process #{pid}"
     else
       raise ArgumentError, 'process already being traced?'
@@ -304,7 +309,7 @@ class RBTracer
 
     newline
 
-    if wait_for{ @attached == false }
+    if wait('to detach cleanly'){ @attached == false }
       newline
       STDERR.puts "*** detached from process #{pid}"
     else
@@ -364,7 +369,7 @@ class RBTracer
   # block - The Block that is checked every 50ms until it returns true.
   #
   # Returns true when the condition was met, or false on a timeout.
-  def wait_for(time=5, reason='to detach cleanly')
+  def wait(reason, time=@timeout)
     wait = 0.05 # polling interval
 
     (time/wait).to_i.times do
@@ -742,6 +747,10 @@ EOS
         "evaluate a ruby expression in the process",
         :type => String,
         :short => '-e'
+
+      opt :timeout,
+        "seconds to wait before giving up on attach/detach",
+        :default => 5
     end
 
     opts = Trollop.with_standard_exception_handling(parser) do
@@ -857,6 +866,7 @@ EOS
 
       else
         tracer.out = output if output
+        tracer.timeout = opts[:timeout] if opts[:timeout] > 0
         tracer.prefix = ' ' * opts[:prefix]
         tracer.show_time = opts[:start_time]
         tracer.show_duration = !opts[:no_duration]
