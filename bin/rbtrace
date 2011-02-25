@@ -257,7 +257,7 @@ class RBTracer
       func = func.strip
       next if func.empty?
 
-      if func =~ /^(.+)\((.+)\)$/
+      if func =~ /^(.+?)\((.+)\)$/
         name, args = $1, $2
         args = args.split(',').map{ |a| a.strip }
       end
