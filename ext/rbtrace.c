@@ -481,7 +481,7 @@ event_hook_install()
       event_hook,
       RUBY_EVENT_CALL   | RUBY_EVENT_C_CALL |
       RUBY_EVENT_RETURN | RUBY_EVENT_C_RETURN
-#ifdef RB_EVENT_HOOKS_HAVE_CALLBACK_DATA
+#ifdef RUBY_VM
       , 0
 #endif
     );
