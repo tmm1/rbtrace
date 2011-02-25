@@ -385,6 +385,11 @@ class RBTracer
       begin
         recv_lines
         sleep(wait)
+        begin
+          signal
+        rescue Errno::ESRCH
+          break
+        end
         time -= wait
 
         return true if yield
