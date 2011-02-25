@@ -270,6 +270,11 @@ class RBTracer
           if (err = valid_syntax?(arg)) != true
             raise ArgumentError, "#{err.class} for expression #{arg.inspect} in method #{func.inspect}"
           end
+          if arg =~ /^@/ and arg !~ /^@[_a-z][_a-z0-9]+$/i
+            # arg[0]=='@' means ivar, but if this is an expr
+            # we can hack a space in front so it gets eval'd instead
+            arg = " #{arg}"
+          end
           send_cmd(:addexpr, arg)
         end
       end
@@ -492,7 +497,7 @@ class RBTracer
       tracer = @tracers[tracer_id]
 
       if expr_id > -1
-        tracer[:exprs][expr_id] = expr
+        tracer[:exprs][expr_id] = expr.strip
       end
 
     when 'exprval'
