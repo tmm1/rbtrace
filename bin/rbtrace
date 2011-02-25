@@ -253,12 +253,21 @@ class RBTracer
     send_cmd(:gc)
   end
 
+  # Restrict slow tracing to a specific list of methods.
+  #
+  # methods - The String or Array of method selectors.
+  #
+  # Returns nothing.
+  def add_slow(methods)
+    add(methods, true)
+  end
+
   # Add tracers for the given list of methods.
   #
   # methods - The String or Array of method selectors to trace.
   #
   # Returns nothing.
-  def add(methods)
+  def add(methods, slow=false)
     Array(methods).each do |func|
       func = func.strip
       next if func.empty?
@@ -268,7 +277,7 @@ class RBTracer
         args = args.split(',').map{ |a| a.strip }
       end
 
-      send_cmd(:add, name || func)
+      send_cmd(:add, name || func, slow)
 
       if args and args.any?
         args.each do |arg|
@@ -565,7 +574,7 @@ class RBTracer
         print ')' if @last_tracer and @last_tracer[:arglist]
 
         unless tracer == @last_tracer and @last_tracer[:last] == name
-          puts
+          newline
           print ' '*16 if @show_time
           print @prefix*@nesting if @nesting > 0
           print name
@@ -589,6 +598,9 @@ class RBTracer
       name = klass ? "#{klass}#{ is_singleton ? '.' : '#' }" : ''
       name += @methods[mid] || '(unknown)'
 
+      newline
+      nesting = @nesting if @nesting > 0
+
       if @show_time
         t = Time.at(time/1_000_000)
         print t.strftime("%H:%M:%S.")
@@ -610,7 +622,7 @@ class RBTracer
     when 'gc'
       time, = *cmd
 
-      puts unless @watch_slow
+      newline
       if @show_time
         t = Time.at(time/1_000_000)
         print t.strftime("%H:%M:%S.")
@@ -701,6 +713,10 @@ EOS
         :default => 250,
         :short => '-s'
 
+      opt :slow_methods,
+        "method(s) to restrict --slow to",
+        :type => :strings
+
       opt :methods,
         "method(s) to trace (valid formats: sleep String#gsub Process.pid Kernel# Dir.)",
         :type => :strings,
@@ -768,10 +784,13 @@ EOS
       parser.die :fork, '(can only be invoked with one pid)'
     end
 
-    methods = []
+    methods, smethods = [], []
 
     if opts[:methods_given]
       methods += opts[:methods]
+    end
+    if opts[:slow_methods_given]
+      smethods += opts[:slow_methods]
     end
 
     if opts[:config_given]
@@ -878,7 +897,10 @@ EOS
           tracer.firehose
         else
           tracer.add(methods)       if methods.any?
-          tracer.watch(opts[:slow]) if opts[:slow_given]
+          if opts[:slow_given]
+            tracer.watch(opts[:slow])
+            tracer.add_slow(smethods) if smethods.any?
+          end
         end
         begin
           tracer.recv_loop

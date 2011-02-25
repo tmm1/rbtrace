@@ -54,6 +54,7 @@ timeofday_usec()
 typedef struct {
   int id;
   char *query;
+  bool is_slow;
 
   char *klass_name;
   size_t klass_len;
@@ -331,6 +332,9 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
       if (curr->query) {
         n++;
 
+        // there should never be slow method tracers outside slow mode
+        if (!rbtracer.slow && curr->is_slow) continue;
+
         if (rbtracer.devmode) {
           if ((!curr->mid        || curr->mid == mid) &&
               (!curr->klass_name || (
@@ -366,7 +370,7 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
   }
 
   // are we watching for slow method calls?
-  if (rbtracer.slow) {
+  if (rbtracer.slow && (!tracer || tracer->is_slow)) {
     uint64_t usec = timeofday_usec(), diff = 0;
 
     switch (event) {
@@ -575,7 +579,7 @@ rbtracer_detach()
 }
 
 static int
-rbtracer_add(char *query)
+rbtracer_add(char *query, bool is_slow)
 {
   int i;
   int tracer_id = -1;
@@ -654,6 +658,7 @@ rbtracer_add(char *query)
 
   tracer->id = tracer_id;
   tracer->query = strdup(query);
+  tracer->is_slow = is_slow;
 
   if (klass_end != klass_begin) {
     tracer->klass_name = tracer->query + klass_begin;
@@ -834,15 +839,17 @@ rbtrace__process_event(msgpack_object cmd)
     event_hook_install();
 
   } else if (0 == strncmp("add", str.ptr, str.size)) {
-    if (ary.size != 2 ||
-        ary.ptr[1].type != MSGPACK_OBJECT_RAW)
+    if (ary.size != 3 ||
+        ary.ptr[1].type != MSGPACK_OBJECT_RAW ||
+        ary.ptr[2].type != MSGPACK_OBJECT_BOOLEAN)
       return;
 
     str = ary.ptr[1].via.raw;
+    bool is_slow = ary.ptr[2].via.boolean;
 
     strncpy(query, str.ptr, str.size);
     query[str.size] = 0;
-    last_tracer_id = rbtracer_add(query);
+    last_tracer_id = rbtracer_add(query, is_slow);
 
   } else if (0 == strncmp("addexpr", str.ptr, str.size)) {
     if (ary.size != 2 ||
