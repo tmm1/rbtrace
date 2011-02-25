@@ -177,6 +177,7 @@ class RBTracer
     @last_tracer = nil
 
     @out = STDOUT
+    @out.sync = true
     @prefix = '  '
     @printed_newline = true
 
