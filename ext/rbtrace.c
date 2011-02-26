@@ -91,6 +91,7 @@ static struct {
   uint32_t threshold;
 
   unsigned int num;
+  unsigned int num_slow;
   rbtracer_t list[MAX_TRACERS];
 
   key_t mqo_key;
@@ -118,6 +119,7 @@ rbtracer = {
   .threshold = 250,
 
   .num = 0,
+  .num_slow = 0,
   .list = {},
 
   .mqo_key = 0,
@@ -356,13 +358,16 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
       }
     }
 
-    // no tracer for current method call
-    if (!tracer) goto out;
+    if (tracer) {
+      // matched something, all good!
+    } else if (rbtracer.slow && rbtracer.num_slow == 0) {
+      // in global slow mode, so go ahead.
+    } else {
+      goto out;
+    }
 
-  } else if (rbtracer.slow) {
-    // trace anything that's slow
-    // fall through to slow logic below, after the previous conditional
-    // selects specific methods we might be interested in
+  } else if (rbtracer.slow && rbtracer.num_slow == 0) {
+    // trace everything that's slow
 
   } else {
     // what are we doing here?
@@ -539,6 +544,9 @@ rbtracer_remove(char *query, int id)
     }
 
     rbtracer.num--;
+    if (tracer->is_slow)
+      rbtracer.num_slow--;
+
     if (rbtracer.num == 0)
       event_hook_remove();
   }
@@ -674,6 +682,8 @@ rbtracer_add(char *query, bool is_slow)
     event_hook_install();
 
   rbtracer.num++;
+  if (tracer->is_slow)
+    rbtracer.num_slow++;
 
 out:
   rbtrace__send_event(2,

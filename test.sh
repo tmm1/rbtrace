@@ -23,7 +23,7 @@ trace() {
   echo ------------------------------------------
   echo ./bin/rbtrace -p $PID $*
   echo ------------------------------------------
-  ./bin/rbtrace -p $PID -r 3 $* &
+  ./bin/rbtrace -p $PID $* &
   sleep 2
   kill $!
   wait $! || true
@@ -40,6 +40,8 @@ trace --gc -m Dir.
 trace --slow=250
 trace --slow=250 --slow-methods sleep
 trace --gc -m Dir. --slow=250 --slow-methods sleep
-trace --firehose
+trace --gc -m Dir. --slow=250
+trace -m Process. Dir.pwd "Proc#call"
+# trace --firehose
 
 cleanup

@@ -550,7 +550,7 @@ class RBTracer
         print ')'
         @last_tracer[:arglist] = false
       end
-      puts
+      newline
       if @show_time
         t = Time.at(time/1_000_000)
         print t.strftime("%H:%M:%S.")
@@ -563,7 +563,7 @@ class RBTracer
       @max_nesting = @nesting if @nesting > @max_nesting
       @last_nesting = @nesting
       @last_tracer = tracer
-      tracer[:last] = name
+      tracer[:last] = "#{name}:#{@nesting-1}"
 
     when 'return','creturn'
       time, tracer_id = *cmd
@@ -574,11 +574,11 @@ class RBTracer
       if start = tracer[:times].pop
         name = tracer[:names].pop
         diff = time - start
-        @last_tracer[:arglist] = false if @last_tracer and @last_tracer[:last] != name
+        @last_tracer[:arglist] = false if @last_tracer and @last_tracer[:last] != "#{name}:#{@nesting}"
 
         print ')' if @last_tracer and @last_tracer[:arglist]
 
-        unless tracer == @last_tracer and @last_tracer[:last] == name
+        unless tracer == @last_tracer and @last_tracer[:last] == "#{name}:#{@nesting}"
           newline
           print ' '*16 if @show_time
           print @prefix*@nesting if @nesting > 0
