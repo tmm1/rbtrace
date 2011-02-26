@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    rbtrace (0.3.9)
+    rbtrace (0.3.10)
       ffi (>= 1.0.5)
       msgpack (>= 0.4.3)
       trollop (>= 1.16.2)
