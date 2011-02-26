@@ -22,7 +22,7 @@ unless File.exists?("#{CWD}/dst/lib/libmsgpackc.a")
 
     sys("tar zxvf #{msgpack}")
     Dir.chdir(dir) do
-      sys("./configure --disable-shared --with-pic --prefix=#{CWD}/dst/")
+      sys("./configure --disable-shared --disable-cxx --with-pic --prefix=#{CWD}/dst/")
       sys("make install")
     end
   end
