@@ -17,14 +17,25 @@ unless File.exists?("#{CWD}/dst/lib/libmsgpackc.a")
   msgpack = File.basename('msgpack-0.5.4.tar.gz')
   dir = File.basename(msgpack, '.tar.gz')
 
+  # build fat binaries on osx
+  if RUBY_PLATFORM =~ /darwin/ and (archs = Config::CONFIG['LDFLAGS'].scan(/(-arch\s+.+?)(?:\s|$)/).flatten).any?
+    cflags, ldflags = ENV['CFLAGS'], ENV['LDFLAGS']
+    ENV['CFLAGS'] = "#{cflags} #{archs.join(' ')}"
+    ENV['LDFLAGS'] = "#{ldflags} #{archs.join(' ')}"
+  end
+
   Dir.chdir('src') do
     FileUtils.rm_rf(dir) if File.exists?(dir)
 
     sys("tar zxvf #{msgpack}")
     Dir.chdir(dir) do
-      sys("./configure --disable-shared --disable-cxx --with-pic --prefix=#{CWD}/dst/")
+      sys("./configure --disable-dependency-tracking --disable-shared --disable-cxx --with-pic --prefix=#{CWD}/dst/")
       sys("make install")
     end
+  end
+
+  if cflags or ldflags
+    ENV['CFLAGS'], ENV['LDFLAGS'] = cflags, ldflags
   end
 end
 
