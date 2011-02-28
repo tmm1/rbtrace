@@ -901,10 +901,10 @@ rbtrace__process_event(msgpack_object cmd)
       }
 
       rbtrace__send_event(1,
-          "forked",
-          inner == -1 ? 'b' : 'u',
-          inner == -1 ? false : (uint32_t) inner
-          );
+        "forked",
+        inner == -1 ? 'b' : 'u',
+        inner == -1 ? false : (uint32_t) inner
+      );
 
       // kill off outer fork
       _exit(0);
