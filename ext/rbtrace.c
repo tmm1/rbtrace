@@ -449,7 +449,7 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
             val = rb_inspect(rb_ivar_get(self, rb_intern(expr)));
 
           } else {
-            snprintf(buffer, len+150, "(begin; ObjectSpace._id2ref(%lu).instance_eval{ %s }; rescue Exception => e; e; end).inspect", NUM2ULONG(rb_obj_id(self)), expr);
+            snprintf(buffer, len+150, "(begin; ObjectSpace._id2ref(%ld).instance_eval{ %s }; rescue Exception => e; e; end).inspect", NUM2LONG(rb_obj_id(self)), expr);
             val = rb_eval_string_protect(buffer, 0);
           }
 
