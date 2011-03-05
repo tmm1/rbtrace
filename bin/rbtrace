@@ -585,6 +585,7 @@ class RBTracer
           print name
         end
         print ' <%f>' % (diff/1_000_000.0) if @show_duration
+        newline
 
         if @nesting == 0 and @max_nesting > 1
           # unless tracer == @last_tracer and @last_tracer[:last] == name
