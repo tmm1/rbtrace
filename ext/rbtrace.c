@@ -192,7 +192,7 @@ rbtrace__send_event(int nargs, const char *name, ...)
           msgpack_pack_unsigned_long(pk, ulong);
           break;
 
-        case 't': // unsigned long long (timestamps)
+        case 't': // uint64 (timestamps)
           uint64 = va_arg(ap, uint64_t);
           msgpack_pack_uint64(pk, uint64);
           break;
@@ -211,7 +211,7 @@ rbtrace__send_event(int nargs, const char *name, ...)
           break;
 
         default:
-          fprintf(stderr, "unknown type (%c) passed to rbtrace__send_event\n", (char)type);
+          fprintf(stderr, "unknown type (%d) passed to rbtrace__send_event for %s\n", (int)type, name);
       }
     }
 
@@ -404,7 +404,7 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
       rbtrace__send_event(6,
         event == RUBY_EVENT_RETURN ? "slow" : "cslow",
         't', rbtracer.call_times[ rbtracer.num_calls ],
-        'u', diff,
+        't', diff,
         'u', rbtracer.num_calls,
         'l', mid,
         'b', singleton,
