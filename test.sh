@@ -13,7 +13,7 @@ export RUBYOPT="-I."
 ruby server.rb &
 export PID=$!
 
-trap cleanup SIGINT SIGTERM
+trap cleanup INT TERM
 cleanup() {
   kill $PID
   wait $PID || true
