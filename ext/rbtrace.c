@@ -222,7 +222,7 @@ rbtrace__send_event(int nargs, const char *name, ...)
   msg.mtype = 1;
 
   if (rbtracer.sbuf->size > sizeof(msg.buf)) {
-    fprintf(stderr, "rbtrace__send_event(): message is too large (%zd > %lu)\n", rbtracer.sbuf->size, sizeof(msg.buf));
+    fprintf(stderr, "rbtrace__send_event(): message is too large (%zd > %zu)\n", rbtracer.sbuf->size, sizeof(msg.buf));
     return;
   }
 
