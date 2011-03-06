@@ -12,7 +12,7 @@ Gem::Specification.new do |s|
   s.bindir = 'bin'
   s.executables << 'rbtrace'
 
-  s.add_dependency 'ffi',     '>= 1.0.5'
+  s.add_dependency 'ffi',     '>= 1.0.6'
   s.add_dependency 'trollop', '>= 1.16.2'
   s.add_dependency 'msgpack', '>= 0.4.3'
 

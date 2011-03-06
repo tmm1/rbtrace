@@ -2,14 +2,14 @@ PATH
   remote: .
   specs:
     rbtrace (0.3.11)
-      ffi (>= 1.0.5)
+      ffi (>= 1.0.6)
       msgpack (>= 0.4.3)
       trollop (>= 1.16.2)
 
 GEM
   remote: http://rubygems.org/
   specs:
-    ffi (1.0.5)
+    ffi (1.0.6)
       rake (>= 0.8.7)
     msgpack (0.4.4)
     rake (0.8.7)
