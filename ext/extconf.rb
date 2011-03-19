@@ -30,7 +30,7 @@ unless File.exists?("#{CWD}/dst/lib/libmsgpackc.a")
     sys("tar zxvf #{msgpack}")
     Dir.chdir(dir) do
       if RUBY_PLATFORM =~ /i686/ and gcc = `gcc -v 2>&1` and gcc =~ /gcc version (\d\.\d)/ and $1.to_f <= 4.1
-        ENV['CFLAGS'] += " -march=i686 "
+        ENV['CFLAGS'] = " #{ENV['CFLAGS']} -march=i686 "
       end
       sys("./configure --disable-dependency-tracking --disable-shared --disable-cxx --with-pic --prefix=#{CWD}/dst/")
       sys("make install")
