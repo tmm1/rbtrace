@@ -16,10 +16,10 @@ unless File.exists?("#{CWD}/dst/lib/libmsgpackc.a")
 
   msgpack = File.basename('msgpack-0.5.4.tar.gz')
   dir = File.basename(msgpack, '.tar.gz')
+  cflags, ldflags = ENV['CFLAGS'], ENV['LDFLAGS']
 
   # build fat binaries on osx
   if RUBY_PLATFORM =~ /darwin/ and (archs = Config::CONFIG['LDFLAGS'].scan(/(-arch\s+.+?)(?:\s|$)/).flatten).any?
-    cflags, ldflags = ENV['CFLAGS'], ENV['LDFLAGS']
     ENV['CFLAGS'] = "#{cflags} #{archs.join(' ')}"
     ENV['LDFLAGS'] = "#{ldflags} #{archs.join(' ')}"
   end
