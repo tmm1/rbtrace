@@ -154,11 +154,15 @@ class RBTracer
       raise ArgumentError, 'could not signal process, are you running as root?'
     end
 
-    signal
-    sleep 0.25 # wait for process to create msgqs
+    5.times do
+      signal
+      sleep 0.15 # wait for process to create msgqs
 
-    @qi = MsgQ.msgget( pid, 0666)
-    @qo = MsgQ.msgget(-pid, 0666)
+      @qi = MsgQ.msgget( pid, 0666)
+      @qo = MsgQ.msgget(-pid, 0666)
+
+      break if @qi > -1 || @qo > -1
+    end
 
     if @qi == -1 || @qo == -1
       raise ArgumentError, 'pid is not listening for messages, did you `require "rbtrace"`'
@@ -770,6 +774,11 @@ EOS
         :type => String,
         :short => '-e'
 
+      opt :exec,
+        "spawn new ruby process and attach to it",
+        :type => :strings,
+        :short => nil
+
       opt :timeout,
         "seconds to wait before giving up on attach/detach",
         :default => 5
@@ -777,7 +786,15 @@ EOS
 
     opts = Trollop.with_standard_exception_handling(parser) do
       raise Trollop::HelpNeeded if ARGV.empty?
+      parser.stop_on '--exec'
       parser.parse(ARGV)
+    end
+
+    if ARGV.first == '--exec'
+      ARGV.shift
+      opts[:exec_given] = true
+      opts[:exec] = ARGV.dup
+      ARGV.clear
     end
 
     unless %w[ fork eval slow firehose methods config gc ].find{ |n| opts[:"#{n}_given"] }
@@ -788,6 +805,15 @@ EOS
 
     if opts[:fork_given] and opts[:pid].size != 1
       parser.die :fork, '(can only be invoked with one pid)'
+    end
+
+    if opts[:exec_given]
+      if opts[:pid_given]
+        parser.die :exec, '(cannot exec and attach to pid)'
+      end
+      if opts[:fork_given]
+        parser.die :fork, '(cannot fork inside newly execed process)'
+      end
     end
 
     methods, smethods = [], []
@@ -822,7 +848,15 @@ EOS
 
     tracee = nil
 
-    if opts[:pid].size <= 1
+    if opts[:exec_given]
+      tracee = fork{
+        Process.setsid
+        ENV['RUBYOPT'] = "-r#{File.expand_path('../../lib/rbtrace',__FILE__)}"
+        exec(*opts[:exec])
+      }
+      STDERR.puts "*** spawned child #{tracee}: #{opts[:exec].inspect[1..-2]}"
+
+    elsif opts[:pid].size <= 1
       tracee = opts[:pid].first
 
     else
@@ -916,6 +950,12 @@ EOS
     ensure
       if tracer
         tracer.detach
+      end
+
+      if opts[:exec_given]
+        STDERR.puts "*** waiting on spawned child #{tracee}"
+        Process.kill 'TERM', tracee
+        Process.waitpid(tracee)
       end
     end
   end

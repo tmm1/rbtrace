@@ -196,6 +196,5 @@ for popular ruby libraries and functions.
 * add watch expressions to fire tracers only when an expression is true
 * add special expressions for method args (_arg0_, _arguments_)
 * optimize local variable lookup to avoid instance_eval
-* run process via bin/rbtrace (to trace rubygems and bootup time)
 * investigate mach_msg on osx since msgget(2) has hard kernel limits
 
