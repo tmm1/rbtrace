@@ -14,7 +14,7 @@ require 'fileutils'
 unless File.exists?("#{CWD}/dst/lib/libmsgpackc.a")
   Logging.message "Building msgpack\n"
 
-  msgpack = File.basename('msgpack-0.5.4.tar.gz')
+  msgpack = File.basename('msgpack-0.5.7.tar.gz')
   dir = File.basename(msgpack, '.tar.gz')
   cflags, ldflags = ENV['CFLAGS'], ENV['LDFLAGS']
 
@@ -32,7 +32,7 @@ unless File.exists?("#{CWD}/dst/lib/libmsgpackc.a")
       if RUBY_PLATFORM =~ /i686/ and gcc = `gcc -v 2>&1` and gcc =~ /gcc version (\d\.\d)/ and $1.to_f <= 4.1
         ENV['CFLAGS'] = " #{ENV['CFLAGS']} -march=i686 "
       end
-      sys("./configure --disable-dependency-tracking --disable-shared --disable-cxx --with-pic --prefix=#{CWD}/dst/")
+      sys("./configure --disable-dependency-tracking --disable-shared --with-pic --prefix=#{CWD}/dst/")
       sys("make install")
     end
   end
