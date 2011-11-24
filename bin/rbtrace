@@ -779,6 +779,11 @@ EOS
         :type => :strings,
         :short => nil
 
+      opt :wait,
+        "seconds to wait before attaching to process",
+        :default => 0,
+        :short => nil
+
       opt :timeout,
         "seconds to wait before giving up on attach/detach",
         :default => 5
@@ -855,6 +860,11 @@ EOS
         exec(*opts[:exec])
       }
       STDERR.puts "*** spawned child #{tracee}: #{opts[:exec].inspect[1..-2]}"
+
+      if (secs = opts[:wait]) > 0
+        STDERR.puts "*** waiting #{secs} seconds for child to boot up"
+        sleep secs
+      end
 
     elsif opts[:pid].size <= 1
       tracee = opts[:pid].first
