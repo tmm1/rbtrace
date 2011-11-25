@@ -658,7 +658,7 @@ class RBTracer
     parser = Trollop::Parser.new do
       version <<-EOS
 rbtrace: like strace, but for ruby code
-  version 0.3.13
+  version 0.3.16
   (c) 2011 Aman Gupta (tmm1)
   http://github.com/tmm1/rbtrace
 EOS
@@ -672,7 +672,10 @@ for examples and more information, see http://github.com/tmm1/rbtrace
 
 Usage:
 
-  rbtrace -p <PID>         # trace the given process
+  rbtrace --exec <CMD>     # run and trace <CMD>
+  rbtrace --pid <PID+>     # trace the given process(es)
+  rbtrace --ps <CMD>       # look for running <CMD> processes to trace
+
   rbtrace -o <FILE>        # write output to file
   rbtrace -t               # show method call start time
   rbtrace -n               # hide duration of each method call
@@ -709,10 +712,20 @@ Trace Expressions:
 All Options:\n
 
 EOS
+      opt :exec,
+        "spawn new ruby process and attach to it",
+        :type => :strings,
+        :short => nil
+
       opt :pid,
         "pid of the ruby process to trace",
         :type => :ints,
         :short => '-p'
+
+      opt :ps,
+        "find any matching processes to trace",
+        :type => :string,
+        :short => nil
 
       opt :firehose,
         "show all method calls",
@@ -773,11 +786,6 @@ EOS
         "evaluate a ruby expression in the process",
         :type => String,
         :short => '-e'
-
-      opt :exec,
-        "spawn new ruby process and attach to it",
-        :type => :strings,
-        :short => nil
 
       opt :wait,
         "seconds to wait before attaching to process",
@@ -852,6 +860,58 @@ EOS
     end
 
     tracee = nil
+
+    if opts[:ps_given]
+      list = `ps aux`.split("\n")
+      filtered = list.grep(Regexp.new opts[:ps])
+      filtered.reject! do |line|
+        line =~ /^\w+\s+#{Process.pid}\s+/ # cannot trace self
+      end
+
+      if filtered.size > 0
+        max_len = filtered.size.to_s.size
+
+        STDERR.puts "*** found #{filtered.size} processes matching #{opts[:ps].inspect}"
+        filtered.each_with_index do |line, i|
+          STDERR.puts "   [#{(i+1).to_s.rjust(max_len)}]   #{line.strip}"
+        end
+        STDERR.puts   "   [0]   all #{filtered.size} processes"
+
+        while true
+          STDERR.sync = true
+          STDERR.print "*** trace which processes? (0/1,4): "
+
+          begin
+            input = gets
+          rescue Interrupt
+            exit 1
+          end
+
+          if input =~ /^(\d+,?)+$/
+            if input.strip == '0'
+              pids = filtered.map do |line|
+                line.split[1].to_i
+              end
+            else
+              indices = input.split(',').map(&:to_i)
+              pids = indices.map do |i|
+                if i > 0 and line = filtered[i-1]
+                  line.split[1].to_i
+                end
+              end
+            end
+
+            unless pids.include?(nil)
+              opts[:pid] = pids
+              break
+            end
+          end
+        end
+      else
+        STDERR.puts "*** could not find any processes matching #{opts[:ps].inspect}"
+        exit 1
+      end
+    end
 
     if opts[:exec_given]
       tracee = fork{
