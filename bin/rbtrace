@@ -875,7 +875,7 @@ EOS
         filtered.each_with_index do |line, i|
           STDERR.puts "   [#{(i+1).to_s.rjust(max_len)}]   #{line.strip}"
         end
-        STDERR.puts   "   [0]   all #{filtered.size} processes"
+        STDERR.puts   "   [#{'0'.rjust(max_len)}]   all #{filtered.size} processes"
 
         while true
           STDERR.sync = true
