@@ -11,6 +11,7 @@
 #include <strings.h>
 #include <sys/ipc.h>
 #include <sys/msg.h>
+#include <sys/resource.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -38,11 +39,21 @@
 #endif
 
 static uint64_t
+ru_utime_usec()
+{
+  struct rusage r_usage;
+  getrusage(RUSAGE_SELF, &r_usage);
+  return (uint64_t)r_usage.ru_utime.tv_sec*1e6 +
+         (uint64_t)r_usage.ru_utime.tv_usec;
+}
+
+static uint64_t
 timeofday_usec()
 {
   struct timeval tv;
   gettimeofday(&tv, NULL);
-  return (uint64_t)tv.tv_sec*1e6 + (uint64_t)tv.tv_usec;
+  return (uint64_t)tv.tv_sec*1e6 +
+         (uint64_t)tv.tv_usec;
 }
 
 #define MAX_CALLS 32768 // up to this many stack frames examined in slow watch mode
@@ -87,7 +98,9 @@ static struct {
   bool firehose;
 
   bool slow;
+  bool slowcpu;
   uint64_t call_times[MAX_CALLS];
+  uint64_t call_utimes[MAX_CALLS];
   int num_calls;
   uint32_t threshold;
 
@@ -116,6 +129,7 @@ rbtracer = {
   .firehose = false,
 
   .slow = false,
+  .slowcpu = false,
   .num_calls = 0,
   .threshold = 250,
 
@@ -377,13 +391,18 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
 
   // are we watching for slow method calls?
   if (rbtracer.slow && (!tracer || tracer->is_slow)) {
-    uint64_t usec = timeofday_usec(), diff = 0;
+    uint64_t usec = timeofday_usec(),
+             ut_usec = ru_utime_usec(),
+             diff = 0;
 
     switch (event) {
       case RUBY_EVENT_C_CALL:
       case RUBY_EVENT_CALL:
-        if (rbtracer.num_calls < MAX_CALLS)
+        if (rbtracer.num_calls < MAX_CALLS) {
           rbtracer.call_times[ rbtracer.num_calls ] = usec;
+          if (rbtracer.slowcpu)
+            rbtracer.call_utimes[ rbtracer.num_calls ] = ut_usec;
+        }
 
         rbtracer.num_calls++;
         break;
@@ -393,8 +412,12 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
         if (rbtracer.num_calls > 0) {
           rbtracer.num_calls--;
 
-          if (rbtracer.num_calls < MAX_CALLS)
-            diff = usec - rbtracer.call_times[ rbtracer.num_calls ];
+          if (rbtracer.num_calls < MAX_CALLS) {
+            if (rbtracer.slowcpu)
+              diff = ut_usec - rbtracer.call_utimes[ rbtracer.num_calls ];
+            else
+              diff = usec - rbtracer.call_times[ rbtracer.num_calls ];
+          }
         }
         break;
     }
@@ -568,6 +591,7 @@ rbtracer_detach()
 
   rbtracer.firehose = false;
   rbtracer.slow = false;
+  rbtracer.slowcpu = false;
   rbtracer.gc = false;
   rbtracer.devmode = false;
 
@@ -724,13 +748,14 @@ out:
 }
 
 static void
-rbtracer_watch(uint32_t threshold)
+rbtracer_watch(uint32_t threshold, bool cpu_time)
 {
   if (!rbtracer.slow) {
     rbtracer.num_calls = 0;
     rbtracer.threshold = threshold;
     rbtracer.firehose = false;
     rbtracer.slow = true;
+    rbtracer.slowcpu = cpu_time;
 
     event_hook_install();
   }
@@ -837,13 +862,13 @@ rbtrace__process_event(msgpack_object cmd)
 
     rbtracer_detach();
 
-  } else if (0 == strncmp("watch", str.ptr, str.size)) {
+  } else if (0 == strncmp("watch", str.ptr, 5)) {
     if (ary.size != 2 ||
         ary.ptr[1].type != MSGPACK_OBJECT_POSITIVE_INTEGER)
       return;
 
     unsigned int msec = ary.ptr[1].via.u64;
-    rbtracer_watch(msec);
+    rbtracer_watch(msec, str.size > 5 /* watchcpu */);
 
   } else if (0 == strncmp("firehose", str.ptr, str.size)) {
     rbtracer.firehose = true;

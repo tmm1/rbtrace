@@ -202,9 +202,9 @@ class RBTracer
   # msec - The Fixnum threshold in milliseconds
   #
   # Returns nothing.
-  def watch(msec)
+  def watch(msec, cpu_only=false)
     @watch_slow = true
-    send_cmd(:watch, msec)
+    send_cmd(cpu_only ? :watchcpu : :watch, msec)
   end
 
   # Turn on the firehose (show all method calls).
@@ -736,6 +736,11 @@ EOS
         :default => 250,
         :short => '-s'
 
+      opt :slowcpu,
+        "watch for method calls slower than 250 milliseconds (cpu time only)",
+        :default => 250,
+        :short => nil
+
       opt :slow_methods,
         "method(s) to restrict --slow to",
         :type => :strings
@@ -810,8 +815,8 @@ EOS
       ARGV.clear
     end
 
-    unless %w[ fork eval slow firehose methods config gc ].find{ |n| opts[:"#{n}_given"] }
-      $stderr.puts "Error: --slow, --gc, --firehose, --methods or --config required."
+    unless %w[ fork eval slow slowcpu firehose methods config gc ].find{ |n| opts[:"#{n}_given"] }
+      $stderr.puts "Error: --slow, --slowcpu, --gc, --firehose, --methods or --config required."
       $stderr.puts "Try --help for help."
       exit(-1)
     end
@@ -1007,8 +1012,8 @@ EOS
           tracer.firehose
         else
           tracer.add(methods)       if methods.any?
-          if opts[:slow_given]
-            tracer.watch(opts[:slow])
+          if opts[:slow_given] || opts[:slowcpu_given]
+            tracer.watch(opts[:slowcpu] || opts[:slow], opts[:slowcpu_given])
             tracer.add_slow(smethods) if smethods.any?
           end
         end
