@@ -17,6 +17,7 @@ unless File.exists?("#{CWD}/dst/lib/libmsgpackc.a")
   msgpack = File.basename('msgpack-0.5.7.tar.gz')
   dir = File.basename(msgpack, '.tar.gz')
   cflags, ldflags = ENV['CFLAGS'], ENV['LDFLAGS']
+  cc = ENV['CC']
 
   # build fat binaries on osx
   if RUBY_PLATFORM =~ /darwin/ and (archs = Config::CONFIG['LDFLAGS'].scan(/(-arch\s+.+?)(?:\s|$)/).flatten).any?
@@ -32,6 +33,9 @@ unless File.exists?("#{CWD}/dst/lib/libmsgpackc.a")
       if RUBY_PLATFORM =~ /i686/ and gcc = `gcc -v 2>&1` and gcc =~ /gcc version (\d\.\d)/ and $1.to_f <= 4.1
         ENV['CFLAGS'] = " #{ENV['CFLAGS']} -march=i686 "
       end
+      if RUBY_PLATFORM =~ /darwin/ and File.exist?("/usr/bin/gcc-4.2")
+        ENV['CC'] = '/usr/bin/gcc-4.2'
+      end
       sys("./configure --disable-dependency-tracking --disable-shared --with-pic --prefix=#{CWD}/dst/")
       sys("make install")
     end
@@ -39,6 +43,9 @@ unless File.exists?("#{CWD}/dst/lib/libmsgpackc.a")
 
   if cflags or ldflags
     ENV['CFLAGS'], ENV['LDFLAGS'] = cflags, ldflags
+  end
+  if cc
+    ENV['CC'] = cc
   end
 end
 
