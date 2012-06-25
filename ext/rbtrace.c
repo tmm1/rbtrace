@@ -531,6 +531,29 @@ event_hook_remove()
   }
 }
 
+#ifdef HAVE_RB_GC_ADD_EVENT_HOOK
+// requires https://github.com/tmm1/brew2deb/blob/master/packages/ruby/patches/gc-hooks.patch
+static void
+rbtrace_gc_event_hook(rb_gc_event_t gc_event, VALUE obj)
+{
+  switch(gc_event)
+  {
+    case RUBY_GC_EVENT_START:
+      rbtrace__send_event(1,
+        "gc_start",
+        'n'
+      );
+      break;
+    case RUBY_GC_EVENT_END:
+      rbtrace__send_event(1,
+        "gc_end",
+        'n'
+      );
+      break;
+  }
+}
+#endif
+
 static int
 rbtracer_remove(char *query, int id)
 {
@@ -609,6 +632,11 @@ rbtracer_detach()
   if (rbtracer.klass_tbl)
     st_free_table(rbtracer.klass_tbl);
   rbtracer.klass_tbl = NULL;
+
+  event_hook_remove();
+#ifdef HAVE_RB_GC_ADD_EVENT_HOOK
+  rb_gc_remove_event_hook(rbtrace_gc_event_hook);
+#endif
 }
 
 static int
@@ -900,6 +928,9 @@ rbtrace__process_event(msgpack_object cmd)
 
   } else if (0 == strncmp("gc", str.ptr, str.size)) {
     rbtracer.gc = true;
+#ifdef HAVE_RB_GC_ADD_EVENT_HOOK
+    rb_gc_add_event_hook(rbtrace_gc_event_hook, RUBY_GC_EVENT_START|RUBY_GC_EVENT_END);
+#endif
 
   } else if (0 == strncmp("devmode", str.ptr, str.size)) {
     rbtracer.devmode = true;

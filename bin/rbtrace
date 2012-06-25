@@ -629,18 +629,37 @@ class RBTracer
       @max_nesting = nesting if nesting > @max_nesting
       @last_nesting = nesting
 
+    when 'gc_start'
+      time, = *cmd
+      @gc_start = time
+      print 'garbage_collect'
+
+    when 'gc_end'
+      time, = *cmd
+      diff = time - @gc_start
+      # if @gc_mark
+      #   mark = ((@gc_mark - @gc_start) * 100.0 / diff).to_i
+      #   print '(mark: %d%%, sweep: %d%%)' % [mark, 100-mark]
+      # end
+      print ' <%f>' % (diff/1_000_000.0) if @show_duration
+      @gc_start = nil
+      newline
+
     when 'gc'
       time, = *cmd
+      @gc_mark = time
 
-      newline
-      if @show_time
-        t = Time.at(time/1_000_000)
-        print t.strftime("%H:%M:%S.")
-        print "%06d " % (time - t.to_f*1_000_000).round
+      unless @gc_start
+        newline
+        if @show_time
+          t = Time.at(time/1_000_000)
+          print t.strftime("%H:%M:%S.")
+          print "%06d " % (time - t.to_f*1_000_000).round
+        end
+        print @prefix*@last_nesting if @last_nesting > 0
+        print "garbage_collect"
+        puts if @watch_slow
       end
-      print @prefix*@last_nesting if @last_nesting > 0
-      print "garbage_collect"
-      puts if @watch_slow
 
     else
       puts "unknown event #{event}: #{cmd.inspect}"
