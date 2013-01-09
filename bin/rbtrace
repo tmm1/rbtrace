@@ -889,7 +889,7 @@ EOS
       list = `ps aux`.split("\n")
       filtered = list.grep(Regexp.new opts[:ps])
       filtered.reject! do |line|
-        line =~ /^\w+\s+#{Process.pid}\s+/ # cannot trace self
+        line =~ /^\w+\s+(#{Process.pid}|#{Process.ppid})\s+/ # cannot trace self
       end
 
       if filtered.size > 0
