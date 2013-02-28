@@ -304,8 +304,10 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
   if (in_event_hook) return;
   in_event_hook++;
 
+#ifdef ID_ALLOCATOR
   // skip allocators
   if (mid == ID_ALLOCATOR) goto out;
+#endif
 
 #ifdef RUBY_VM
   if (mid == 0) {

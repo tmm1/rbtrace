@@ -43,7 +43,7 @@ module MsgQ
     end
 
     def self.recv_cmd(q, block=true)
-      MsgQ.rb_enable_interrupt if RUBY_VERSION > '1.9'
+      MsgQ.rb_enable_interrupt if RUBY_VERSION > '1.9' && RUBY_VERSION < '2.0'
 
       msg = EventMsg.new
       ret = MsgQ.msgrcv(q, msg, BUF_SIZE, 0, block ? 0 : IPC_NOWAIT)
@@ -57,7 +57,7 @@ module MsgQ
 
       msg[:buf].to_ptr.read_string_length(BUF_SIZE)
     ensure
-      MsgQ.rb_disable_interrupt if RUBY_VERSION > '1.9'
+      MsgQ.rb_disable_interrupt if RUBY_VERSION > '1.9' && RUBY_VERSION < '2.0'
     end
   end
 
@@ -65,7 +65,7 @@ module MsgQ
   attach_function :msgrcv, [:int, EventMsg.ptr, :size_t, :long, :int], :int
   attach_function :msgsnd, [:int, EventMsg.ptr, :size_t, :int], :int
 
-  if RUBY_VERSION > '1.9'
+  if RUBY_VERSION > '1.9' && RUBY_VERSION < '2.0'
     attach_function :rb_enable_interrupt,  [], :void
     attach_function :rb_disable_interrupt, [], :void
   end
