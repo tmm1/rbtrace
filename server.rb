@@ -7,6 +7,14 @@ class String
   end
 end
 
+def fib(n)
+  curr = 0
+  succ = 1
+
+  n.times{ curr, succ = succ, curr + succ }
+  curr
+end
+
 (reload_test = proc{
   Object.send(:remove_const, :Test) if defined? Test
   Test = Class.new do
@@ -29,6 +37,8 @@ while true
 
       reload_test.call
       Test.run
+
+      #fib(1024*100)
     end
   }.call
 end
