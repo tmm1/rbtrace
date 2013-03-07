@@ -1049,7 +1049,13 @@ static VALUE gc_hook, signal_handler_proc;
 static VALUE
 signal_handler_wrapper(VALUE arg, VALUE ctx)
 {
+  static int in_signal_handler = 0;
+  if (in_signal_handler) return;
+
+  in_signal_handler++;
   sigurg(SIGURG);
+  in_signal_handler--;
+
   return Qnil;
 }
 
