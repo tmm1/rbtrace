@@ -619,6 +619,7 @@ rbtracer_detach()
   rbtracer.slowcpu = false;
   rbtracer.gc = false;
   rbtracer.devmode = false;
+  rbtracer.num_calls = 0;
 
   int i;
   for (i=0; i<MAX_TRACERS; i++) {
@@ -1043,7 +1044,14 @@ rbtrace_gc_mark()
   }
 }
 
-static VALUE gc_hook;
+static VALUE gc_hook, signal_handler_proc;
+
+static VALUE
+signal_handler_wrapper(VALUE arg, VALUE ctx)
+{
+  sigurg(SIGURG);
+  return Qnil;
+}
 
 void
 Init_rbtrace()
@@ -1052,15 +1060,21 @@ Init_rbtrace()
   gc_hook = Data_Wrap_Struct(rb_cObject, rbtrace_gc_mark, NULL, NULL);
   rb_global_variable(&gc_hook);
 
+  // catch signal telling us to read from the msgq
+#ifdef RUBY_VM
+  signal_handler_proc = rb_proc_new(signal_handler_wrapper, Qnil);
+  rb_global_variable(&signal_handler_proc);
+  rb_funcall(Qnil, rb_intern("trap"), 2, rb_str_new_cstr("URG"), signal_handler_proc);
+#else
+  signal(SIGURG, sigurg);
+#endif
+
   // setup msgpack
   rbtracer.sbuf = msgpack_sbuffer_new();
   rbtracer.msgpacker = msgpack_packer_new(rbtracer.sbuf, msgpack_sbuffer_write);
 
   // zero out tracer
   memset(&rbtracer.list, 0, sizeof(rbtracer.list));
-
-  // catch signal telling us to read from the msgq
-  signal(SIGURG, sigurg);
 
   // cleanup the msgq on exit
   atexit(msgq_teardown);
