@@ -12,8 +12,10 @@
 #include <sys/ipc.h>
 #include <sys/msg.h>
 #include <sys/resource.h>
+#include <sys/socket.h>
 #include <sys/time.h>
 #include <sys/types.h>
+#include <sys/un.h>
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
@@ -108,10 +110,12 @@ static struct {
   unsigned int num_slow;
   rbtracer_t list[MAX_TRACERS];
 
-  key_t mqo_key;
   key_t mqi_key;
-  int mqo_id;
   int mqi_id;
+
+  int mqo_fd;
+  struct sockaddr_un mqo_addr;
+  socklen_t mqo_len;
 
   msgpack_sbuffer *sbuf;
   msgpack_packer *msgpacker;
@@ -137,10 +141,11 @@ rbtracer = {
   .num_slow = 0,
   .list = {},
 
-  .mqo_key = 0,
   .mqi_key = 0,
-  .mqo_id = -1,
   .mqi_id = -1,
+
+  .mqo_fd = -1,
+  .mqo_addr = {.sun_family = AF_UNIX},
 
   .sbuf = NULL,
   .msgpacker = NULL
@@ -156,7 +161,7 @@ rbtrace__send_event(int nargs, const char *name, ...)
   if (!rbtracer.attached_pid ||
       !rbtracer.sbuf ||
       !rbtracer.msgpacker ||
-      rbtracer.mqo_id == -1)
+      rbtracer.mqo_fd == -1)
     return;
 
   int n;
@@ -232,31 +237,26 @@ rbtrace__send_event(int nargs, const char *name, ...)
     va_end(ap);
   }
 
-  event_msg_t msg;
-  msg.mtype = 1;
-
-  if (rbtracer.sbuf->size > sizeof(msg.buf)) {
-    fprintf(stderr, "rbtrace__send_event(): message is too large (%zd > %zu)\n", rbtracer.sbuf->size, sizeof(msg.buf));
-    return;
-  }
-
-  memcpy(msg.buf, rbtracer.sbuf->data, rbtracer.sbuf->size);
-
   int ret = -1;
   for (n=0; n<10 && ret==-1; n++)
-    ret = msgsnd(rbtracer.mqo_id, &msg, sizeof(msg)-sizeof(long), IPC_NOWAIT);
+    ret = sendto(
+      rbtracer.mqo_fd,
+      rbtracer.sbuf->data, rbtracer.sbuf->size,
+#ifdef MSG_NOSIGNAL
+      MSG_NOSIGNAL,
+#else
+      0,
+#endif
+      &rbtracer.mqo_addr, rbtracer.mqo_len
+    );
 
-  if (ret == -1 && errno == EINVAL) {
-    fprintf(stderr, "msgsnd(%d): %s [detaching]\n", rbtracer.mqo_id, strerror(errno));
+  if (ret == -1 && (errno == EINVAL || errno == ENOENT || errno == ECONNREFUSED || errno == EPIPE)) {
+    fprintf(stderr, "sendto(%d): %s [detaching]\n", rbtracer.mqo_fd, strerror(errno));
 
     msgq_teardown();
     rbtracer_detach();
   } else if (ret == -1) {
-    fprintf(stderr, "msgsnd(%d): %s\n", rbtracer.mqo_id, strerror(errno));
-
-    struct msqid_ds stat;
-    msgctl(rbtracer.mqo_id, IPC_STAT, &stat);
-    fprintf(stderr, "cbytes: %lu, qbytes: %lu, qnum: %lu\n", stat.msg_cbytes, stat.msg_qbytes, stat.msg_qnum);
+    fprintf(stderr, "sendto(%d): %s\n", rbtracer.mqo_fd, strerror(errno));
   }
 }
 
@@ -797,11 +797,11 @@ msgq_teardown()
 {
   pid_t pid = getpid();
 
-  if (rbtracer.mqo_id != -1 && rbtracer.mqo_key == (key_t)pid) {
-    msgctl(rbtracer.mqo_id, IPC_RMID, NULL);
-    rbtracer.mqo_id = -1;
-    rbtracer.mqo_key = 0;
+  if (rbtracer.mqo_fd != -1) {
+    close(rbtracer.mqo_fd);
+    rbtracer.mqo_fd = -1;
   }
+
   if (rbtracer.mqi_id != -1 && rbtracer.mqi_key == (key_t)-pid) {
     msgctl(rbtracer.mqi_id, IPC_RMID, NULL);
     rbtracer.mqi_id = -1;
@@ -819,19 +819,14 @@ static inline void
 msgq_setup()
 {
   pid_t pid = getpid();
+  int val;
 
-  if (rbtracer.mqo_key != (key_t)pid ||
-      rbtracer.mqi_key != (key_t)-pid) {
+  if (rbtracer.mqi_key != (key_t)-pid ||
+      rbtracer.mqo_fd  == -1) {
     msgq_teardown();
   } else {
     return;
   }
-
-  rbtracer.mqo_key = (key_t) pid;
-  rbtracer.mqo_id  = msgget(rbtracer.mqo_key, 0666 | IPC_CREAT);
-
-  if (rbtracer.mqo_id == -1)
-    fprintf(stderr, "msgget() failed to create msgq\n");
 
 
   rbtracer.mqi_key = (key_t) -pid;
@@ -839,6 +834,21 @@ msgq_setup()
 
   if (rbtracer.mqi_id == -1)
     fprintf(stderr, "msgget() failed to create msgq\n");
+
+
+  rbtracer.mqo_fd = socket(AF_UNIX, SOCK_DGRAM, 0);
+  if (rbtracer.mqo_fd == -1)
+    fprintf(stderr, "socket() failed to create dgram\n");
+
+  snprintf(rbtracer.mqo_addr.sun_path, sizeof(rbtracer.mqo_addr.sun_path), "/tmp/rbtrace-%d.sock", pid);
+  rbtracer.mqo_len = SUN_LEN(&rbtracer.mqo_addr);
+
+  val = 65536;
+  setsockopt(rbtracer.mqo_fd, SOL_SOCKET, SO_SNDBUF, &val, sizeof(int));
+#ifdef SO_NOSIGPIPE
+  val = 1;
+  setsockopt(rbtracer.mqo_fd, SOL_SOCKET, SO_NOSIGPIPE, &val, sizeof(int));
+#endif
 }
 
 static void
