@@ -1,4 +1,6 @@
 #!/usr/bin/env ruby
+require 'socket'
+require 'fileutils'
 require 'rubygems'
 require 'ffi'
 require 'msgpack'
@@ -154,17 +156,23 @@ class RBTracer
       raise ArgumentError, 'could not signal process, are you running as root?'
     end
 
+    path = "/tmp/rbtrace-#{@pid}.sock"
+    @sock = Socket.new Socket::AF_UNIX, Socket::SOCK_DGRAM, 0
+    @sockaddr = Socket.pack_sockaddr_un(path)
+    @sock.bind(@sockaddr)
+    FileUtils.chmod 0666, path
+    at_exit{ FileUtils.rm(path) if File.exists?(path) }
+
     5.times do
       signal
       sleep 0.15 # wait for process to create msgqs
 
-      @qi = MsgQ.msgget( pid, 0666)
       @qo = MsgQ.msgget(-pid, 0666)
 
-      break if @qi > -1 || @qo > -1
+      break if @qo > -1
     end
 
-    if @qi == -1 || @qo == -1
+    if @qo == -1
       raise ArgumentError, 'pid is not listening for messages, did you `require "rbtrace"`'
     end
 
@@ -419,11 +427,13 @@ class RBTracer
   end
 
   def recv_cmd(block=true)
-    MsgQ::EventMsg.recv_cmd(@qi, block)
-  rescue Errno::EINTR
-    # on linux, an incoming signal will interrupt msgrcv()
-    # regardless of what SA_RESTART is set to
-    retry
+    if block
+      @sock.recv(65536)
+    else
+      @sock.recv_nonblock(65536)
+    end
+  rescue Errno::EAGAIN
+    nil
   end
 
   def valid_syntax?(code)
