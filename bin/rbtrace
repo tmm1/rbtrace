@@ -821,6 +821,10 @@ EOS
         :type => String,
         :short => '-e'
 
+      opt :backtrace,
+        "get lines from the current backtrace in the process",
+        :type => :int
+
       opt :wait,
         "seconds to wait before attaching to process",
         :default => 0,
@@ -844,7 +848,7 @@ EOS
       ARGV.clear
     end
 
-    unless %w[ fork eval slow slowcpu firehose methods config gc ].find{ |n| opts[:"#{n}_given"] }
+    unless %w[ fork eval backtrace slow slowcpu firehose methods config gc ].find{ |n| opts[:"#{n}_given"] }
       $stderr.puts "Error: --slow, --slowcpu, --gc, --firehose, --methods or --config required."
       $stderr.puts "Try --help for help."
       exit(-1)
@@ -1020,6 +1024,14 @@ EOS
       if opts[:fork_given]
         pid = tracer.fork
         STDERR.puts "*** forked off a busy looping copy at #{pid} (make sure to kill -9 it when you're done)"
+
+      elsif opts[:backtrace_given]
+        num = opts[:backtrace]
+        code = "caller.first(#{num}).join('|')"
+
+        if res = tracer.eval(code)
+          tracer.puts res[1..-2].split('|').join("\n  ")
+        end
 
       elsif opts[:eval_given]
         if res = tracer.eval(code = opts[:eval])
