@@ -42,6 +42,6 @@ trace --slow=250 --slow-methods sleep
 trace --gc -m Dir. --slow=250 --slow-methods sleep
 trace --gc -m Dir. --slow=250
 trace -m Process. Dir.pwd "Proc#call"
-# trace --firehose
+trace --firehose
 
 cleanup
