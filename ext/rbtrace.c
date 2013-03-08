@@ -237,16 +237,6 @@ rbtrace__send_event(int nargs, const char *name, ...)
     va_end(ap);
   }
 
-  event_msg_t msg;
-  msg.mtype = 1;
-
-  if (rbtracer.sbuf->size > sizeof(msg.buf)) {
-    fprintf(stderr, "rbtrace__send_event(): message is too large (%zd > %zu)\n", rbtracer.sbuf->size, sizeof(msg.buf));
-    return;
-  }
-
-  memcpy(msg.buf, rbtracer.sbuf->data, rbtracer.sbuf->size);
-
   int ret = -1;
   for (n=0; n<10 && ret==-1; n++)
     ret = sendto(
