@@ -1060,7 +1060,7 @@ static VALUE
 signal_handler_wrapper(VALUE arg, VALUE ctx)
 {
   static int in_signal_handler = 0;
-  if (in_signal_handler) return;
+  if (in_signal_handler) return Qnil;
 
   in_signal_handler++;
   sigurg(SIGURG);
