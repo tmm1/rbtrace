@@ -1054,7 +1054,7 @@ EOS
         else
           tracer.add(methods)       if methods.any?
           if opts[:slow_given] || opts[:slowcpu_given]
-            tracer.watch(opts[:slowcpu] || opts[:slow], opts[:slowcpu_given])
+            tracer.watch(opts[:slowcpu_given] ? opts[:slowcpu] : opts[:slow], opts[:slowcpu_given])
             tracer.add_slow(smethods) if smethods.any?
           end
         end
