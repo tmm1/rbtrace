@@ -16,6 +16,7 @@ Gem::Specification.new do |s|
   s.add_dependency 'trollop', '>= 1.16.2'
   s.add_dependency 'msgpack', '>= 0.4.3'
 
+  s.license = "MIT"
   s.summary = 'rbtrace: like strace but for ruby code'
   s.description = 'rbtrace shows you method calls happening inside another ruby process in real time.'
 end
