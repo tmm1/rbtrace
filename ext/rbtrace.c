@@ -1008,7 +1008,7 @@ rbtrace__process_event(msgpack_object cmd)
 }
 
 static void
-sigurg(int signal)
+rbtrace__receive(void *data)
 {
   msgq_setup();
   if (rbtracer.mqi_id == -1) return;
@@ -1056,6 +1056,16 @@ rbtrace_gc_mark()
 
 static VALUE gc_hook, signal_handler_proc;
 
+static void
+sigurg(int signal)
+{
+#if defined(HAVE_RB_POSTPONED_JOB_REGISTER_ONE)
+  rb_postponed_job_register_one(0, rbtrace__receive, 0);
+#else
+  rbtrace__receive(0);
+#endif
+}
+
 static VALUE
 signal_handler_wrapper(VALUE arg, VALUE ctx)
 {
@@ -1063,7 +1073,7 @@ signal_handler_wrapper(VALUE arg, VALUE ctx)
   if (in_signal_handler) return Qnil;
 
   in_signal_handler++;
-  sigurg(SIGURG);
+  rbtrace__receive(0);
   in_signal_handler--;
 
   return Qnil;
@@ -1077,7 +1087,9 @@ Init_rbtrace()
   rb_global_variable(&gc_hook);
 
   // catch signal telling us to read from the msgq
-#ifdef RUBY_VM
+#if defined(HAVE_RB_POSTPONED_JOB_REGISTER_ONE)
+  signal(SIGURG, sigurg);
+#elif defined(RUBY_VM)
   signal_handler_proc = rb_proc_new(signal_handler_wrapper, Qnil);
   rb_global_variable(&signal_handler_proc);
   rb_funcall(Qnil, rb_intern("trap"), 2, rb_str_new_cstr("URG"), signal_handler_proc);

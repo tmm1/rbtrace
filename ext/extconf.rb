@@ -58,6 +58,7 @@ end
 
 have_func('rb_during_gc', 'ruby.h')
 have_func('rb_gc_add_event_hook', ['ruby.h', 'node.h'])
+have_func('rb_postponed_job_register_one', 'ruby.h')
 
 # increase message size on linux
 if RUBY_PLATFORM =~ /linux/
