@@ -54,7 +54,7 @@ class RBTracer
       signal
       sleep 0.15 # wait for process to create msgqs
 
-      @qo = MsgQ.msgget(-pid, 0666)
+      @qo = MsgQ.msgget(-@pid, 0666)
 
       break if @qo > -1
     end
