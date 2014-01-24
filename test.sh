@@ -8,7 +8,7 @@ make
 cd ..
 
 bundle check
-export RUBYOPT="-I."
+export RUBYOPT="-I.:lib"
 
 ruby server.rb &
 export PID=$!
