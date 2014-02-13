@@ -54,7 +54,7 @@ class RBTraceCLI
     parser = Trollop::Parser.new do
       version <<-EOS
 rbtrace: like strace, but for ruby code
-  version 0.4.0
+  version 0.4.3
   (c) 2013 Aman Gupta (tmm1)
   http://github.com/tmm1/rbtrace
 EOS
