@@ -139,7 +139,9 @@ class RBTracer
     send_cmd(:eval, code)
 
     if wait('for eval response', 15){ !!@eval_result }
-      @eval_result
+      res = @eval_result
+      @eval_result = nil
+      res
     else
       STDERR.puts '*** timed out waiting for eval response'
     end
