@@ -11,7 +11,9 @@ end
 require 'mkmf'
 require 'fileutils'
 
-unless File.exists?("#{CWD}/dst/lib/libmsgpackc.a")
+libdir = File.basename RbConfig::CONFIG['libdir']
+
+unless File.exists?("#{CWD}/dst/#{libdir}/libmsgpackc.a")
   Logging.message "Building msgpack\n"
 
   msgpack = File.basename('msgpack-0.5.7.tar.gz')
@@ -49,7 +51,7 @@ unless File.exists?("#{CWD}/dst/lib/libmsgpackc.a")
   end
 end
 
-FileUtils.cp "#{CWD}/dst/lib/libmsgpackc.a", "#{CWD}/libmsgpackc_ext.a"
+FileUtils.cp "#{CWD}/dst/#{libdir}/libmsgpackc.a", "#{CWD}/libmsgpackc_ext.a"
 $INCFLAGS[0,0] = "-I#{CWD}/dst/include "
 
 unless have_library('msgpackc_ext') and have_header('msgpack.h')
