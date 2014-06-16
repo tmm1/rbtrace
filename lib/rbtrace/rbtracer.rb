@@ -43,12 +43,11 @@ class RBTracer
       raise ArgumentError, 'could not signal process, are you running as root?'
     end
 
-    path = "/tmp/rbtrace-#{@pid}.sock"
     @sock = Socket.new Socket::AF_UNIX, Socket::SOCK_DGRAM, 0
-    @sockaddr = Socket.pack_sockaddr_un(path)
+    @sockaddr = Socket.pack_sockaddr_un(socket_path)
     @sock.bind(@sockaddr)
-    FileUtils.chmod 0666, path
-    at_exit{ FileUtils.rm(path) if File.exists?(path) }
+    FileUtils.chmod 0666, socket_path
+    at_exit { clean_socket_path }
 
     5.times do
       signal
@@ -90,6 +89,14 @@ class RBTracer
     @watch_slow = false
 
     attach
+  end
+
+  def socket_path
+    "/tmp/rbtrace-#{@pid}.sock"
+  end
+
+  def clean_socket_path
+    FileUtils.rm(socket_path) if File.exists?(socket_path)
   end
 
   # Watch for method calls slower than a threshold.
@@ -233,6 +240,8 @@ class RBTracer
     # STDERR.puts $!.backtrace.join("\n  ")
   rescue Interrupt, SignalException
     retry
+  ensure
+    clean_socket_path
   end
 
   # Process events from the traced process.
