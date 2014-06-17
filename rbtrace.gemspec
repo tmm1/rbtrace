@@ -1,6 +1,8 @@
+require File.expand_path('../lib/rbtrace/version', __FILE__)
+
 Gem::Specification.new do |s|
   s.name = 'rbtrace'
-  s.version = '0.4.3'
+  s.version = RBTracer::VERSION
   s.homepage = 'http://github.com/tmm1/rbtrace'
 
   s.authors = 'Aman Gupta'

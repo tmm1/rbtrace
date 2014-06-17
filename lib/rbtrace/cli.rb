@@ -1,5 +1,6 @@
 require 'trollop'
 require 'rbtrace/rbtracer'
+require 'rbtrace/version'
 
 class RBTraceCLI
   # Suggest increasing the maximum number of bytes allowed on
@@ -54,7 +55,7 @@ class RBTraceCLI
     parser = Trollop::Parser.new do
       version <<-EOS
 rbtrace: like strace, but for ruby code
-  version 0.4.3
+  version #{RBTracer::VERSION}
   (c) 2013 Aman Gupta (tmm1)
   http://github.com/tmm1/rbtrace
 EOS
