@@ -324,7 +324,7 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
   bool singleton = false;
   if (klass) {
     if (TYPE(klass) == T_ICLASS) {
-      klass = RBASIC(klass)->klass;
+      klass = RBASIC_CLASS(klass);
     }
 
     singleton = FL_TEST(klass, FL_SINGLETON);
