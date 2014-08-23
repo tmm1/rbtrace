@@ -38,7 +38,7 @@ unless File.exists?("#{CWD}/dst/#{libdir}/libmsgpackc.a")
       if RUBY_PLATFORM =~ /darwin/ and File.exist?("/usr/bin/gcc-4.2")
         ENV['CC'] = '/usr/bin/gcc-4.2'
       end
-      sys("./configure --disable-dependency-tracking --disable-shared --with-pic --prefix=#{CWD}/dst/")
+      sys("./configure --disable-dependency-tracking --disable-shared --with-pic --prefix=#{CWD}/dst/ --libdir=#{CWD}/dst/#{libdir}")
       sys("make install")
     end
   end
