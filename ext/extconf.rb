@@ -22,7 +22,7 @@ unless File.exists?("#{CWD}/dst/#{libdir}/libmsgpackc.a")
   cc = ENV['CC']
 
   # build fat binaries on osx
-  if RUBY_PLATFORM =~ /darwin/ and (archs = Config::CONFIG['LDFLAGS'].scan(/(-arch\s+.+?)(?:\s|$)/).flatten).any?
+  if RUBY_PLATFORM =~ /darwin/ and (archs = RbConfig::CONFIG['LDFLAGS'].scan(/(-arch\s+.+?)(?:\s|$)/).flatten).any?
     ENV['CFLAGS'] = "#{cflags} #{archs.join(' ')}"
     ENV['LDFLAGS'] = "#{ldflags} #{archs.join(' ')}"
   end
