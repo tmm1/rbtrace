@@ -3,7 +3,8 @@
 rbtrace shows you method calls happening inside another ruby process in real
 time.
 
-rbtrace works on ruby 1.8 and 1.9, running on linux or mac osx.
+rbtrace works on ruby 1.8 through 2.2 (and beyond), running on linux or mac
+osx.
 
 rbtrace is designed to have minimal overhead, and should be safe to run
 in production.
@@ -197,4 +198,3 @@ for popular ruby libraries and functions.
 * add special expressions for method args (_arg0_, _arguments_)
 * optimize local variable lookup to avoid instance_eval
 * investigate mach_msg on osx since msgget(2) has hard kernel limits
-
