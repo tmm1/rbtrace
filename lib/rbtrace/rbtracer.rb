@@ -246,16 +246,22 @@ class RBTracer
 
   # Process events from the traced process.
   #
-  # Returns nothing.
+  # Returns nothing
   def recv_loop
     while true
-      # block until a message arrives
-      process_line(recv_cmd)
+      ready = IO.select([@sock], nil, nil, 1)
 
-      # process any remaining messages
-      recv_lines
+      if ready
+        # block until a message arrives
+        process_line(recv_cmd)
+        # process any remaining messages
+        recv_lines
+      else
+        Process.kill(0, @pid)
+      end
+
     end
-  rescue Errno::EINVAL, Errno::EIDRM
+  rescue Errno::EINVAL, Errno::EIDRM, Errno::ESRCH
     # process went away
   end
 
