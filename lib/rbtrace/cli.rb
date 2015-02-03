@@ -322,7 +322,7 @@ EOS
     if opts[:exec_given]
       tracee = fork{
         Process.setsid
-        ENV['RUBYOPT'] = "-r#{File.expand_path('../../lib/rbtrace',__FILE__)}"
+        ENV['RUBYOPT'] = "-r#{File.expand_path('../../rbtrace',__FILE__)}"
         exec(*opts[:exec])
       }
       STDERR.puts "*** spawned child #{tracee}: #{opts[:exec].inspect[1..-2]}"
