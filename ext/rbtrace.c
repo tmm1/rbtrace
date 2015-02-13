@@ -39,6 +39,9 @@
 #ifndef RSTRING_LEN
 #define RSTRING_LEN(str) RSTRING(str)->len
 #endif
+#ifndef RBASIC_CLASS
+#define RBASIC_CLASS(obj) (RBASIC(obj)->klass)
+#endif
 
 
 #ifdef __FreeBSD__
