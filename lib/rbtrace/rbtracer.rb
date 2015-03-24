@@ -145,7 +145,7 @@ class RBTracer
 
     send_cmd(:eval, code)
 
-    if wait('for eval response', 15){ !!@eval_result }
+    if wait('for eval response'){ !!@eval_result }
       res = @eval_result
       @eval_result = nil
       res
