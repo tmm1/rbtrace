@@ -199,7 +199,7 @@ EOS
         :short => nil
 
       opt :timeout,
-        "seconds to wait before giving up on attach/detach",
+        "seconds to wait before giving up on attach/detach/eval",
         :default => 5
     end
 
