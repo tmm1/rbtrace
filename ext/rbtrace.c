@@ -184,8 +184,8 @@ rbtrace__send_event(int nargs, const char *name, ...)
 
   msgpack_pack_array(pk, nargs+1);
 
-  msgpack_pack_raw(pk, strlen(name));
-  msgpack_pack_raw_body(pk, name, strlen(name));
+  msgpack_pack_bin(pk, strlen(name));
+  msgpack_pack_bin_body(pk, name, strlen(name));
 
   if (nargs > 0) {
     int type;
@@ -238,8 +238,8 @@ rbtrace__send_event(int nargs, const char *name, ...)
           if (!str)
             str = (char *)"";
 
-          msgpack_pack_raw(pk, strlen(str));
-          msgpack_pack_raw_body(pk, str, strlen(str));
+          msgpack_pack_bin(pk, strlen(str));
+          msgpack_pack_bin_body(pk, str, strlen(str));
           break;
 
         default:
@@ -877,7 +877,7 @@ rbtrace__process_event(msgpack_object cmd)
   VALUE val = Qnil;
 
   msgpack_object_array ary;
-  msgpack_object_raw str;
+  msgpack_object_bin str;
 
   /* fprintf(stderr, "GOT: ");*/
   /* msgpack_object_print(stderr, cmd);*/
@@ -886,10 +886,10 @@ rbtrace__process_event(msgpack_object cmd)
   ary = cmd.via.array;
 
   if (ary.size < 1 ||
-      ary.ptr[0].type != MSGPACK_OBJECT_RAW)
+      ary.ptr[0].type != MSGPACK_OBJECT_BIN)
     return;
 
-  str = ary.ptr[0].via.raw;
+  str = ary.ptr[0].via.bin;
 
   if (0 == strncmp("attach", str.ptr, str.size)) {
     if (ary.size != 2 ||
@@ -930,11 +930,11 @@ rbtrace__process_event(msgpack_object cmd)
 
   } else if (0 == strncmp("add", str.ptr, str.size)) {
     if (ary.size != 3 ||
-        ary.ptr[1].type != MSGPACK_OBJECT_RAW ||
+        ary.ptr[1].type != MSGPACK_OBJECT_BIN ||
         ary.ptr[2].type != MSGPACK_OBJECT_BOOLEAN)
       return;
 
-    str = ary.ptr[1].via.raw;
+    str = ary.ptr[1].via.bin;
     bool is_slow = ary.ptr[2].via.boolean;
 
     strncpy(query, str.ptr, str.size);
@@ -943,10 +943,10 @@ rbtrace__process_event(msgpack_object cmd)
 
   } else if (0 == strncmp("addexpr", str.ptr, str.size)) {
     if (ary.size != 2 ||
-        ary.ptr[1].type != MSGPACK_OBJECT_RAW)
+        ary.ptr[1].type != MSGPACK_OBJECT_BIN)
       return;
 
-    str = ary.ptr[1].via.raw;
+    str = ary.ptr[1].via.bin;
 
     strncpy(query, str.ptr, str.size);
     query[str.size] = 0;
@@ -1006,10 +1006,10 @@ rbtrace__process_event(msgpack_object cmd)
 
   } else if (0 == strncmp("eval", str.ptr, str.size)) {
     if (ary.size != 2 ||
-        ary.ptr[1].type != MSGPACK_OBJECT_RAW)
+        ary.ptr[1].type != MSGPACK_OBJECT_BIN)
       return;
 
-    str = ary.ptr[1].via.raw;
+    str = ary.ptr[1].via.bin;
 
     strncpy(query, str.ptr, str.size);
     query[str.size] = 0;
