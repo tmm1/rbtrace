@@ -389,6 +389,10 @@ EOS
         parser.die :pid, "(#{e.message})"
       end
 
+      if opts[:timeout] > 0
+        tracer.timeout = opts[:timeout]
+      end
+
       if opts[:fork_given]
         pid = tracer.fork
         STDERR.puts "*** forked off a busy looping copy at #{pid} (make sure to kill -9 it when you're done)"
