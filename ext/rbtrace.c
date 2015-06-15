@@ -877,7 +877,7 @@ rbtrace__process_event(msgpack_object cmd)
   VALUE val = Qnil;
 
   msgpack_object_array ary;
-  msgpack_object_bin str;
+  msgpack_object_str str;
 
   /* fprintf(stderr, "GOT: ");*/
   /* msgpack_object_print(stderr, cmd);*/
@@ -886,10 +886,10 @@ rbtrace__process_event(msgpack_object cmd)
   ary = cmd.via.array;
 
   if (ary.size < 1 ||
-      ary.ptr[0].type != MSGPACK_OBJECT_BIN)
+      ary.ptr[0].type != MSGPACK_OBJECT_STR)
     return;
 
-  str = ary.ptr[0].via.bin;
+  str = ary.ptr[0].via.str;
 
   if (0 == strncmp("attach", str.ptr, str.size)) {
     if (ary.size != 2 ||
@@ -930,11 +930,11 @@ rbtrace__process_event(msgpack_object cmd)
 
   } else if (0 == strncmp("add", str.ptr, str.size)) {
     if (ary.size != 3 ||
-        ary.ptr[1].type != MSGPACK_OBJECT_BIN ||
+        ary.ptr[1].type != MSGPACK_OBJECT_STR ||
         ary.ptr[2].type != MSGPACK_OBJECT_BOOLEAN)
       return;
 
-    str = ary.ptr[1].via.bin;
+    str = ary.ptr[1].via.str;
     bool is_slow = ary.ptr[2].via.boolean;
 
     strncpy(query, str.ptr, str.size);
@@ -943,10 +943,10 @@ rbtrace__process_event(msgpack_object cmd)
 
   } else if (0 == strncmp("addexpr", str.ptr, str.size)) {
     if (ary.size != 2 ||
-        ary.ptr[1].type != MSGPACK_OBJECT_BIN)
+        ary.ptr[1].type != MSGPACK_OBJECT_STR)
       return;
 
-    str = ary.ptr[1].via.bin;
+    str = ary.ptr[1].via.str;
 
     strncpy(query, str.ptr, str.size);
     query[str.size] = 0;
@@ -1006,10 +1006,10 @@ rbtrace__process_event(msgpack_object cmd)
 
   } else if (0 == strncmp("eval", str.ptr, str.size)) {
     if (ary.size != 2 ||
-        ary.ptr[1].type != MSGPACK_OBJECT_BIN)
+        ary.ptr[1].type != MSGPACK_OBJECT_STR)
       return;
 
-    str = ary.ptr[1].via.bin;
+    str = ary.ptr[1].via.str;
 
     strncpy(query, str.ptr, str.size);
     query[str.size] = 0;
