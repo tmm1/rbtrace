@@ -1,3 +1,2 @@
 *.gem
 .bundle
-ext/src/msgpack*
