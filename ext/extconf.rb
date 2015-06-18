@@ -16,7 +16,7 @@ libdir = File.basename RbConfig::CONFIG['libdir']
 unless File.exists?("#{CWD}/dst/#{libdir}/libmsgpackc.a")
   Logging.message "Building msgpack\n"
 
-  msgpack = File.basename('msgpack-0.5.7.tar.gz')
+  msgpack = File.basename('msgpack-1.1.0.tar.gz')
   dir = File.basename(msgpack, '.tar.gz')
   cflags, ldflags = ENV['CFLAGS'], ENV['LDFLAGS']
   cc = ENV['CC']
@@ -38,6 +38,7 @@ unless File.exists?("#{CWD}/dst/#{libdir}/libmsgpackc.a")
       if RUBY_PLATFORM =~ /darwin/ and File.exist?("/usr/bin/gcc-4.2")
         ENV['CC'] = '/usr/bin/gcc-4.2'
       end
+      puts "  -- env CFLAGS=#{ENV['CFLAGS'].inspect} LDFLAGS=#{ENV['LDFLAGS'].inspect} CC=#{ENV['CC'].inspect}"
       sys("./configure --disable-dependency-tracking --disable-shared --with-pic --prefix=#{CWD}/dst/ --libdir=#{CWD}/dst/#{libdir}")
       sys("make install")
     end

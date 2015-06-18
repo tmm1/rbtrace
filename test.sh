@@ -1,6 +1,8 @@
 #!/bin/sh
 set -e
 
+bundle check || bundle install
+
 cd ext
 [ -f Makefile ] && make clean
 ruby extconf.rb
