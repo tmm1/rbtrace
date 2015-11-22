@@ -248,7 +248,7 @@ EOS
       Array(opts[:config]).each do |config|
         file = [
           config,
-          File.expand_path("../../tracers/#{config}.tracer", __FILE__)
+          File.expand_path("../../../tracers/#{config}.tracer", __FILE__)
         ].find{ |f| File.exists?(f) }
 
         unless file
