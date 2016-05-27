@@ -2,19 +2,19 @@
 require 'rib/config'
 
 module Rib::Rbtrace
-  def puts s=nil
-    RBTraceCLI.tracer.puts(s)
+  def puts(arg=nil)
+    RBTraceCLI.tracer.puts(arg)
   end
 
-  def print s=nil
-    RBTraceCLI.tracer.print(s)
+  def print(arg=nil)
+    RBTraceCLI.tracer.print(arg)
   end
 
-  def format_result result
+  def format_result(result)
     result_prompt + result
   end
 
-  def loop_eval input
+  def loop_eval(input)
     RBTraceCLI.tracer.eval(input)
   end
 end

@@ -2,12 +2,12 @@
 require 'irb'
 
 class IRB::Context
-  def puts s=nil
-    RBTraceCLI.tracer.puts(s)
+  def puts(arg=nil)
+    RBTraceCLI.tracer.puts(arg)
   end
 
-  def print s=nil
-    RBTraceCLI.tracer.print(s)
+  def print(arg=nil)
+    RBTraceCLI.tracer.print(arg)
   end
 
   def inspect_last_value
@@ -16,7 +16,7 @@ class IRB::Context
 end
 
 class IRB::WorkSpace
-  def evaluate(context, statements, file = __FILE__, line = __LINE__)
+  def evaluate(context, statements, file=__FILE__, line=__LINE__)
     RBTraceCLI.tracer.eval(statements)
   end
 end
