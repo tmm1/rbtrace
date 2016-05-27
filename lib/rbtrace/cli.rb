@@ -417,7 +417,18 @@ EOS
 
       elsif opts[:interactive_given]
         require "rbtrace/interactive/#{opts[:interactive]}"
-        load `which #{opts[:interactive]}`.chomp
+
+        bin = Gem::Specification.find do |spec|
+          bin_file = spec.bin_file(opts[:interactive])
+          break bin_file if File.exist?(bin_file)
+        end || ENV['PATH'].split(':').find do |path|
+          found = Dir["#{path}/*"].find do |file|
+            break file if File.basename(file) == opts[:interactive]
+          end
+          break found if found
+        end
+
+        load(bin)
 
       else
         tracer.out = output if output
