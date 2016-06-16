@@ -46,10 +46,8 @@
 
 #ifdef __FreeBSD__
  #define PLATFORM_FREEBSD
-#endif
-
-#ifdef __linux__
- #define PLATFORM_LINUX
+#elif __OpenBSD__
+ #define PLATFORM_OPENBSD
 #endif
 
 
@@ -967,7 +965,7 @@ rbtrace__process_event(msgpack_object cmd)
     if (outer == 0) {
       rb_eval_string_protect("$0 = \"[DEBUG] #{Process.ppid}\"", 0);
 
-#ifdef PLATFORM_FREEBSD
+#if defined(PLATFORM_FREEBSD) || defined(PLATFORM_OPENBSD)
       // The call setpgrp() is equivalent to setpgid(0,0).
       setpgid(0,0);
 #else
