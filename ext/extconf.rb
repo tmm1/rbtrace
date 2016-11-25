@@ -68,6 +68,11 @@ if RUBY_PLATFORM =~ /linux/
   $defs.push("-DBUF_SIZE=256")
 end
 
+# work around the fact that 1.9.1 is fucked, because fuck.
+if RUBY_VERSION =~ /^1\.9\.[01]$/
+  $defs.push("-DRB_EVENT_HOOKS_HAVE_CALLBACK_DATA=1")
+end
+
 # warnings save lives
 $CFLAGS << " -Wall "
 
