@@ -553,10 +553,10 @@ class RBTracer
     when 'gc_end'
       time, = *cmd
       diff = time - @gc_start
-      # if @gc_mark
-      #   mark = ((@gc_mark - @gc_start) * 100.0 / diff).to_i
-      #   print '(mark: %d%%, sweep: %d%%)' % [mark, 100-mark]
-      # end
+      if @gc_mark
+        mark = ((@gc_mark - @gc_start) * 100.0 / diff).to_i
+        print '(mark: %d%%, sweep: %d%%)' % [mark, 100-mark]
+      end
       print ' <%f>' % (diff/1_000_000.0) if @show_duration
       @gc_start = nil
       newline
