@@ -22,6 +22,7 @@
 
 #include <msgpack.h>
 #include <ruby.h>
+#include <ruby/debug.h>
 
 #ifndef RUBY_VM
 #include <env.h>
@@ -544,28 +545,50 @@ event_hook_remove()
   }
 }
 
-#ifdef HAVE_RB_GC_ADD_EVENT_HOOK
-// requires https://github.com/tmm1/brew2deb/blob/master/packages/ruby/patches/gc-hooks.patch
 static void
-rbtrace_gc_event_hook(rb_gc_event_t gc_event, VALUE obj)
+rbtrace_gc_event_hook(VALUE tpval, void *data)
 {
-  switch(gc_event)
-  {
-    case RUBY_GC_EVENT_START:
+  if (in_event_hook) return;
+  in_event_hook++;
+
+  rb_trace_arg_t *tparg = rb_tracearg_from_tracepoint(tpval);
+  switch(rb_tracearg_event_flag(tparg)) {
+    case RUBY_INTERNAL_EVENT_GC_START:
       rbtrace__send_event(1,
         "gc_start",
         'n'
       );
       break;
-    case RUBY_GC_EVENT_END:
+    case RUBY_INTERNAL_EVENT_GC_END_MARK:
+      rbtrace__send_event(1,
+        "gc",
+        'n'
+      );
+      break;
+    case RUBY_INTERNAL_EVENT_GC_END_SWEEP:
       rbtrace__send_event(1,
         "gc_end",
         'n'
       );
       break;
   }
+
+  in_event_hook--;
 }
-#endif
+
+static VALUE gc_hook;
+
+static void
+rbtrace_gc_enable_event_hook()
+{
+  rb_tracepoint_enable(gc_hook);
+}
+
+static void
+rbtrace_gc_disable_event_hook()
+{
+  rb_tracepoint_disable(gc_hook);
+}
 
 static int
 rbtracer_remove(char *query, int id)
@@ -628,9 +651,12 @@ rbtracer_detach()
   rbtracer.firehose = false;
   rbtracer.slow = false;
   rbtracer.slowcpu = false;
-  rbtracer.gc = false;
   rbtracer.devmode = false;
   rbtracer.num_calls = 0;
+
+  if (rbtracer.gc)
+    rbtrace_gc_disable_event_hook();
+  rbtracer.gc = false;
 
   int i;
   for (i=0; i<MAX_TRACERS; i++) {
@@ -648,9 +674,6 @@ rbtracer_detach()
   rbtracer.klass_tbl = NULL;
 
   event_hook_remove();
-#ifdef HAVE_RB_GC_ADD_EVENT_HOOK
-  rb_gc_remove_event_hook(rbtrace_gc_event_hook);
-#endif
 }
 
 static int
@@ -968,9 +991,7 @@ rbtrace__process_event(msgpack_object cmd)
 
   } else if (0 == strncmp("gc", str.ptr, str.size)) {
     rbtracer.gc = true;
-#ifdef HAVE_RB_GC_ADD_EVENT_HOOK
-    rb_gc_add_event_hook(rbtrace_gc_event_hook, RUBY_GC_EVENT_START|RUBY_GC_EVENT_END);
-#endif
+    rbtrace_gc_enable_event_hook();
 
   } else if (0 == strncmp("devmode", str.ptr, str.size)) {
     rbtracer.devmode = true;
@@ -1078,19 +1099,6 @@ rbtrace__receive(void *data)
   }
 }
 
-static void
-rbtrace_gc_mark()
-{
-  if (rbtracer.gc && !in_event_hook) {
-    rbtrace__send_event(1,
-      "gc",
-      'n'
-    );
-  }
-}
-
-static VALUE gc_hook;
-
 #if defined(HAVE_RB_POSTPONED_JOB_REGISTER_ONE) || !defined(RUBY_VM)
 static void
 sigurg(int signal)
@@ -1140,8 +1148,10 @@ Init_rbtrace()
   rb_define_singleton_method(output, "write", send_write, 1);
 
   // hook into the gc
-  gc_hook = Data_Wrap_Struct(rb_cObject, rbtrace_gc_mark, NULL, NULL);
-  rb_global_variable(&gc_hook);
+  gc_hook = rb_tracepoint_new(0,
+      RUBY_INTERNAL_EVENT_GC_START | RUBY_INTERNAL_EVENT_GC_END_MARK | RUBY_INTERNAL_EVENT_GC_END_SWEEP,
+      rbtrace_gc_event_hook, NULL);
+	rb_global_variable(&gc_hook);
 
   // catch signal telling us to read from the msgq
 #if defined(HAVE_RB_POSTPONED_JOB_REGISTER_ONE)

@@ -59,8 +59,11 @@ unless have_library('msgpackc_ext') and have_header('msgpack.h')
   raise 'msgpack build failed'
 end
 
+have_const('RUBY_INTERNAL_EVENT_GC_START')
+have_const('RUBY_INTERNAL_EVENT_GC_END_MARK')
+have_const('RUBY_INTERNAL_EVENT_GC_END_SWEEP')
+
 have_func('rb_during_gc', 'ruby.h')
-have_func('rb_gc_add_event_hook', ['ruby.h', 'node.h'])
 have_func('rb_postponed_job_register_one', 'ruby.h')
 
 # increase message size on linux
