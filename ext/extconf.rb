@@ -30,7 +30,7 @@ unless File.exists?("#{CWD}/dst/#{libdir}/libmsgpackc.a")
   Dir.chdir('src') do
     FileUtils.rm_rf(dir) if File.exists?(dir)
 
-    sys("tar zxvf #{msgpack}")
+    sys("tar zxvfo #{msgpack}")
     Dir.chdir(dir) do
       if RUBY_PLATFORM =~ /i686/ and gcc = `gcc -v 2>&1` and gcc =~ /gcc version (\d\.\d)/ and $1.to_f <= 4.1
         ENV['CFLAGS'] = " #{ENV['CFLAGS']} -march=i686 "
