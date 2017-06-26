@@ -3,6 +3,8 @@ require 'rbtrace/rbtracer'
 require 'rbtrace/version'
 
 class RBTraceCLI
+  singleton_class.send(:attr_accessor, :tracer)
+
   # Suggest increasing the maximum number of bytes allowed on
   # a message queue to 1MB.
   #
@@ -189,6 +191,12 @@ EOS
         :type => String,
         :short => '-e'
 
+      opt :interactive,
+        "interactive",
+        :type => String,
+        :default => 'irb',
+        :short => '-i'
+
       opt :backtrace,
         "get lines from the current backtrace in the process",
         :type => :int
@@ -216,8 +224,8 @@ EOS
       ARGV.clear
     end
 
-    unless %w[ fork eval backtrace slow slowcpu firehose methods config gc ].find{ |n| opts[:"#{n}_given"] }
-      $stderr.puts "Error: --slow, --slowcpu, --gc, --firehose, --methods or --config required."
+    unless %w[ fork eval interactive backtrace slow slowcpu firehose methods config gc ].find{ |n| opts[:"#{n}_given"] }
+      $stderr.puts "Error: --slow, --slowcpu, --gc, --firehose, --methods, --interactive or --config required."
       $stderr.puts "Try --help for help."
       exit(-1)
     end
@@ -384,7 +392,7 @@ EOS
 
     begin
       begin
-        tracer = RBTracer.new(tracee)
+        self.tracer = RBTracer.new(tracee)
       rescue ArgumentError => e
         parser.die :pid, "(#{e.message})"
       end
@@ -410,6 +418,21 @@ EOS
           tracer.puts ">> #{code}"
           tracer.puts "=> #{res}"
         end
+
+      elsif opts[:interactive_given]
+        require "rbtrace/interactive/#{opts[:interactive]}"
+
+        bin = Gem::Specification.find do |spec|
+          bin_file = spec.bin_file(opts[:interactive])
+          break bin_file if File.exist?(bin_file)
+        end || ENV['PATH'].split(':').find do |path|
+          found = Dir["#{path}/*"].find do |file|
+            break file if File.basename(file) == opts[:interactive]
+          end
+          break found if found
+        end
+
+        load(bin)
 
       else
         tracer.out = output if output
