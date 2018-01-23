@@ -215,6 +215,9 @@ EOS
       opt :timeout,
         "seconds to wait before giving up on attach/detach/eval",
         :default => 5
+
+      opt :memory,
+        "Report on process memory usage"
     end
 
     opts = Trollop.with_standard_exception_handling(parser) do
@@ -230,7 +233,7 @@ EOS
       ARGV.clear
     end
 
-    unless %w[ fork eval interactive backtrace backtraces slow slowcpu firehose methods config gc ].find{ |n| opts[:"#{n}_given"] }
+    unless %w[ fork eval interactive backtrace backtraces slow slowcpu firehose methods config gc memory ].find{ |n| opts[:"#{n}_given"] }
       $stderr.puts "Error: --slow, --slowcpu, --gc, --firehose, --methods, --interactive or --config required."
       $stderr.puts "Try --help for help."
       exit(-1)
@@ -392,9 +395,9 @@ EOS
             end
           rescue Interrupt, SignalException
             STDERR.puts "*** waiting on child tracers: #{tracers.inspect}"
-            tracers.each do |pid|
+            tracers.each do |pid1|
               begin
-                Process.kill 'INT', pid
+                Process.kill 'INT', pid1
               rescue Errno::ESRCH
               end
             end
@@ -443,6 +446,39 @@ EOS
 
         if res = tracer.eval(code)
           tracer.puts res.split(delim).join("\n")
+        end
+
+      elsif opts[:memory_given]
+        memory_report = File.expand_path('../memory_report.rb', __FILE__)
+
+        require 'tempfile'
+        output = Tempfile.new("output")
+        output.close
+
+        begin
+          code = "Thread.new do; begin; output = '#{output.path}'; eval(File.read('#{memory_report}')); end; end"
+          tracer.eval(code)
+
+          File.open(output.path, 'r') do |f|
+            while true
+              begin
+                unless line = f.readline
+                  sleep 0.1
+                  next
+                end
+
+                if line.strip == "__END__"
+                  break
+                else
+                  print line
+                end
+              rescue EOFError
+                sleep 0.1
+              end
+            end
+          end
+        ensure
+          output.unlink
         end
 
       elsif opts[:eval_given]
