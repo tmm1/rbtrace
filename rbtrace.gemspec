@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require File.expand_path('../lib/rbtrace/version', __FILE__)
 
 Gem::Specification.new do |s|
@@ -8,11 +10,14 @@ Gem::Specification.new do |s|
   s.authors = 'Aman Gupta'
   s.email   = 'aman@tmm1.net'
 
+  s.require_paths = ['lib', 'ext']
+
   s.files = `git ls-files`.split("\n")
   s.extensions = 'ext/extconf.rb'
 
   s.bindir = 'bin'
   s.executables << 'rbtrace'
+
 
   s.add_dependency 'ffi',     '>= 1.0.6'
   s.add_dependency 'trollop', '>= 1.16.2'
