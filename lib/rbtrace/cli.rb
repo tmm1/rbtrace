@@ -217,7 +217,14 @@ EOS
         :default => 5
 
       opt :memory,
-        "Report on process memory usage"
+        "report on process memory usage"
+
+
+      opt :heapdump,
+        "generate a heap dump for the process in FILENAME",
+        :default => "AUTO",
+        :short => "-h"
+
     end
 
     opts = Trollop.with_standard_exception_handling(parser) do
@@ -233,8 +240,8 @@ EOS
       ARGV.clear
     end
 
-    unless %w[ fork eval interactive backtrace backtraces slow slowcpu firehose methods config gc memory ].find{ |n| opts[:"#{n}_given"] }
-      $stderr.puts "Error: --slow, --slowcpu, --gc, --firehose, --methods, --interactive or --config required."
+    unless %w[ fork eval interactive backtrace backtraces slow slowcpu firehose methods config gc memory heapdump].find{ |n| opts[:"#{n}_given"] }
+      $stderr.puts "Error: --slow, --slowcpu, --gc, --firehose, --methods, --interactive, --backtraces, --backtrace, --memory, --heapdump or --config required."
       $stderr.puts "Try --help for help."
       exit(-1)
     end
@@ -480,6 +487,20 @@ EOS
         ensure
           output.unlink
         end
+
+      elsif opts[:heapdump_given]
+        filename = opts[:heapdump]
+
+        if filename == "AUTO"
+          require 'tempfile'
+          temp = Tempfile.new("dump")
+          filename = temp.path
+          temp.close
+          temp.unlink
+        end
+
+        tracer.eval("file = File.open('#{filename}', 'w'); ObjectSpace.dump_all(output: file); file.close")
+        puts "Heapdump being written to #{filename}"
 
       elsif opts[:eval_given]
         if res = tracer.eval(code = opts[:eval])
