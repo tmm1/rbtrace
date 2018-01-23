@@ -285,18 +285,32 @@ EOS
       if filtered.size > 0
         max_len = filtered.size.to_s.size
 
-        STDERR.puts "*** found #{filtered.size} processes matching #{opts[:ps].inspect}"
+        STDERR.puts "*** found #{filtered.size} process#{filtered.size == 1 ? "" : "es"} matching #{opts[:ps].inspect}"
         filtered.each_with_index do |line, i|
-          STDERR.puts "   [#{(i+1).to_s.rjust(max_len)}]   #{line.strip}"
+          prefix = "   [#{(i+1).to_s.rjust(max_len)}]   "
+          if filtered.length == 1
+            prefix = ""
+          end
+          STDERR.puts "#{prefix}#{line.strip}"
         end
-        STDERR.puts   "   [#{'0'.rjust(max_len)}]   all #{filtered.size} processes"
+
+        if filtered.length > 1
+          STDERR.puts   "   [#{'0'.rjust(max_len)}]   all #{filtered.size} processes"
+        end
 
         while true
           STDERR.sync = true
-          STDERR.print "*** trace which processes? (0/1,4): "
+
+          if filtered.length > 1
+            STDERR.print "*** trace which processes? (0/1,4): "
+          end
 
           begin
-            input = gets
+            if filtered.length == 1
+              input = "1"
+            else
+              input = gets
+            end
           rescue Interrupt
             exit 1
           end
