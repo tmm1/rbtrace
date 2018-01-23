@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    rbtrace (0.4.9)
+    rbtrace (0.4.10)
       ffi (>= 1.0.6)
       msgpack (>= 0.4.3)
       trollop (>= 1.16.2)
@@ -10,13 +10,15 @@ GEM
   remote: https://rubygems.org/
   specs:
     ffi (1.9.18)
-    msgpack (1.2.0)
+    msgpack (1.2.2)
+    rake (10.5.0)
     trollop (2.1.2)
 
 PLATFORMS
   ruby
 
 DEPENDENCIES
+  rake (~> 10.0)
   rbtrace!
 
 BUNDLED WITH
