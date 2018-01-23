@@ -14,6 +14,11 @@ in production.
     % gem install rbtrace
     % rbtrace --help
 
+## supported Rubies
+
+rbtrace supports all stable versions of Ruby MRI, as of 23-01-2018 this is
+Ruby version 2.2 and later.
+
 ## tracer types
 
 rbtrace has several different tracing modes.
@@ -33,6 +38,14 @@ rbtrace has several different tracing modes.
 ### gc: trace garbage collections
 
     % rbtrace -p <PID> --gc
+
+### memory: produce a basic memory report regarding process (including GC.stat and ObjectSpace stats)
+
+    % rbtrace -p <PID> --memory
+
+### backtraces: return backtraces for all active threads in a process
+
+    % rbtrace -p <PID> --backtraces
 
 ### notes
 
@@ -193,6 +206,7 @@ for popular ruby libraries and functions.
 
 ## todo
 
+* correct irb implementation so it establishes a dedicated channel
 * add triggers to start tracing slow methods only inside another method
 * add watch expressions to fire tracers only when an expression is true
 * add special expressions for method args (_arg0_, _arguments_)
