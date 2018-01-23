@@ -197,6 +197,12 @@ EOS
         :default => 'irb',
         :short => '-i'
 
+      opt :backtraces,
+        "get backtraces for all threads in current process, -1 denotes all frames",
+        :type => String,
+        :default => '-1',
+        :short => '-b'
+
       opt :backtrace,
         "get lines from the current backtrace in the process",
         :type => :int
@@ -224,7 +230,7 @@ EOS
       ARGV.clear
     end
 
-    unless %w[ fork eval interactive backtrace slow slowcpu firehose methods config gc ].find{ |n| opts[:"#{n}_given"] }
+    unless %w[ fork eval interactive backtrace backtraces slow slowcpu firehose methods config gc ].find{ |n| opts[:"#{n}_given"] }
       $stderr.puts "Error: --slow, --slowcpu, --gc, --firehose, --methods, --interactive or --config required."
       $stderr.puts "Try --help for help."
       exit(-1)
@@ -425,6 +431,18 @@ EOS
 
         if res = tracer.eval(code)
           tracer.puts res[1..-2].split('|').join("\n  ")
+        end
+
+      elsif opts[:backtraces_given]
+        num = opts[:backtraces].to_i
+        num = -1 if num == 0
+
+        delim = "146621c9d681409aa"
+
+        code = "Thread.list.map{|t| t.backtrace[0...#{num}].join(\"#{delim}\")}.join(\"#{delim*2}\")"
+
+        if res = tracer.eval(code)
+          tracer.puts res.split(delim).join("\n")
         end
 
       elsif opts[:eval_given]
