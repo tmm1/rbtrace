@@ -19,9 +19,9 @@ Gem::Specification.new do |s|
   s.executables << 'rbtrace'
 
 
-  s.add_dependency 'ffi',     '>= 1.0.6'
-  s.add_dependency 'trollop', '>= 1.16.2'
-  s.add_dependency 'msgpack', '>= 0.4.3'
+  s.add_dependency 'ffi',      '>= 1.0.6'
+  s.add_dependency 'optimist', '>= 3.0.0'
+  s.add_dependency 'msgpack',  '>= 0.4.3'
 
   s.add_development_dependency "rake", "~> 10.0"
 
