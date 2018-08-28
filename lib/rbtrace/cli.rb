@@ -1,4 +1,4 @@
-require 'trollop'
+require 'optimist'
 require 'rbtrace/rbtracer'
 require 'rbtrace/version'
 
@@ -54,7 +54,7 @@ class RBTraceCLI
     check_msgmnb
     cleanup_queues
 
-    parser = Trollop::Parser.new do
+    parser = Optimist::Parser.new do
       version <<-EOS
 rbtrace: like strace, but for ruby code
   version #{RBTracer::VERSION}
@@ -227,8 +227,8 @@ EOS
 
     end
 
-    opts = Trollop.with_standard_exception_handling(parser) do
-      raise Trollop::HelpNeeded if ARGV.empty?
+    opts = Optimist.with_standard_exception_handling(parser) do
+      raise Optimist::HelpNeeded if ARGV.empty?
       parser.stop_on '--exec'
       parser.parse(ARGV)
     end
