@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    rbtrace (0.4.10)
+    rbtrace (0.4.11)
       ffi (>= 1.0.6)
       msgpack (>= 0.4.3)
       optimist (>= 3.0.0)
@@ -22,4 +22,4 @@ DEPENDENCIES
   rbtrace!
 
 BUNDLED WITH
-   1.16.1
+   1.16.4
