@@ -34,7 +34,7 @@ class RBTraceCLI
   # Returns nothing.
   def self.cleanup_queues
     if (pids = `ps ax -o pid`.split("\n").map{ |p| p.strip.to_i }).any?
-      ipcs = `ipcs -q`.split("\n").grep(/^(q|0x)/).map{ |line| line[/(0x[a-f0-9]+)/,1] }
+      ipcs = `ipcs -q`.split("\n").grep(/^(q|0x)/).map{ |line| line[/(0x[a-f0-9]+)/,1] }.compact
       ipcs.each do |ipci|
         next if ipci.match(/^0xf/)
 
