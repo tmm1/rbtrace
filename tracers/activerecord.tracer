@@ -1,3 +1,4 @@
+ActiveRecord::ConnectionAdapters::AbstractMysqlAdapter#execute(sql)
 ActiveRecord::ConnectionAdapters::MysqlAdapter#execute(sql)
 ActiveRecord::ConnectionAdapters::PostgreSQLAdapter#execute(sql)
 ActiveRecord::ConnectionAdapters::SQLiteAdapter#execute(sql)
