@@ -862,6 +862,22 @@ msgq_setup()
 #endif
 }
 
+static VALUE
+eval_inspect(VALUE rb_code) {
+  VALUE binding, result;
+
+  binding = rb_eval_string("$rbtrace_binding ||= binding");
+  result = rb_funcall(binding, rb_intern("eval"), 1, rb_code);
+  return rb_funcall(result, rb_intern("inspect"), 0);
+}
+
+static VALUE
+rescue_inspect(VALUE arg) {
+  VALUE exception = rb_errinfo(); /* get last exception */
+  rb_set_errinfo(Qnil);
+  return rb_funcall(exception, rb_intern("inspect"), 0);
+}
+
 static void
 rbtrace__process_event(msgpack_object cmd)
 {
@@ -1012,8 +1028,10 @@ rbtrace__process_event(msgpack_object cmd)
     strncpy(query, str.ptr, str.size);
     query[str.size] = 0;
 
-    snprintf(code, BUF_SIZE+150, "(begin; %s; rescue Exception => e; e; end).inspect", query);
-    val = rb_eval_string_protect(code, 0);
+    VALUE rb_code, binding;
+    rb_code = rb_str_new2(query);
+
+    val = rb_rescue(eval_inspect, rb_code, rescue_inspect, Qnil);
 
     if (TYPE(val) == T_STRING) {
       rbtrace__send_event(1,
@@ -1021,7 +1039,6 @@ rbtrace__process_event(msgpack_object cmd)
         's', RSTRING_PTR(val)
       );
     }
-
   }
 }
 
