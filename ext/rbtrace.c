@@ -1102,9 +1102,26 @@ signal_handler_wrapper(VALUE arg, VALUE ctx)
 }
 #endif
 
+static VALUE
+send_write(VALUE klass, VALUE val) {
+  if (TYPE(val) == T_STRING) {
+    rbtrace__send_event(1,
+      "write",
+      's', RSTRING_PTR(val)
+    );
+  }
+
+  return Qnil;
+}
+
 void
 Init_rbtrace()
 {
+  VALUE mod = rb_define_module("RBTrace");
+  VALUE output = rb_define_module_under(mod, "OUT");
+
+  rb_define_singleton_method(output, "write", send_write, 1);
+
   // hook into the gc
   gc_hook = Data_Wrap_Struct(rb_cObject, rbtrace_gc_mark, NULL, NULL);
   rb_global_variable(&gc_hook);

@@ -575,6 +575,10 @@ class RBTracer
         puts if @watch_slow
       end
 
+    when 'write'
+      data, = *cmd
+      STDOUT.write(data)
+
     else
       puts "unknown event #{event}: #{cmd.inspect}"
 
