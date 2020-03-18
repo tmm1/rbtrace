@@ -44,6 +44,11 @@
 #define RBASIC_CLASS(obj) (RBASIC(obj)->klass)
 #endif
 
+#if defined(HAVE_CONST_RUBY_INTERNAL_EVENT_GC_START) \
+ && defined(HAVE_CONST_RUBY_INTERNAL_EVENT_GC_END_MARK) \
+ && defined(HAVE_CONST_RUBY_INTERNAL_EVENT_GC_END_SWEEP)
+ #define WITH_GC_EVENTS
+#endif
 
 #ifdef __FreeBSD__
  #define PLATFORM_FREEBSD
@@ -545,6 +550,7 @@ event_hook_remove()
   }
 }
 
+#if defined(WITH_GC_EVENTS)
 static void
 rbtrace_gc_event_hook(VALUE tpval, void *data)
 {
@@ -589,6 +595,7 @@ rbtrace_gc_disable_event_hook()
 {
   rb_tracepoint_disable(gc_hook);
 }
+#endif
 
 static int
 rbtracer_remove(char *query, int id)
@@ -651,12 +658,14 @@ rbtracer_detach()
   rbtracer.firehose = false;
   rbtracer.slow = false;
   rbtracer.slowcpu = false;
+  rbtracer.gc = false;
   rbtracer.devmode = false;
   rbtracer.num_calls = 0;
 
+#if defined(WITH_GC_EVENTS)
   if (rbtracer.gc)
     rbtrace_gc_disable_event_hook();
-  rbtracer.gc = false;
+#endif
 
   int i;
   for (i=0; i<MAX_TRACERS; i++) {
@@ -991,7 +1000,9 @@ rbtrace__process_event(msgpack_object cmd)
 
   } else if (0 == strncmp("gc", str.ptr, str.size)) {
     rbtracer.gc = true;
+#if defined(WITH_GC_EVENTS)
     rbtrace_gc_enable_event_hook();
+#endif
 
   } else if (0 == strncmp("devmode", str.ptr, str.size)) {
     rbtracer.devmode = true;
@@ -1147,11 +1158,13 @@ Init_rbtrace()
 
   rb_define_singleton_method(output, "write", send_write, 1);
 
+#if defined(WITH_GC_EVENTS)
   // hook into the gc
   gc_hook = rb_tracepoint_new(0,
       RUBY_INTERNAL_EVENT_GC_START | RUBY_INTERNAL_EVENT_GC_END_MARK | RUBY_INTERNAL_EVENT_GC_END_SWEEP,
       rbtrace_gc_event_hook, NULL);
 	rb_global_variable(&gc_hook);
+#endif
 
   // catch signal telling us to read from the msgq
 #if defined(HAVE_RB_POSTPONED_JOB_REGISTER_ONE)
