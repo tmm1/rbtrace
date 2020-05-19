@@ -862,13 +862,11 @@ msgq_setup()
 #endif
 }
 
+static VALUE rbtrace_module;
+
 static VALUE
 eval_inspect(VALUE rb_code) {
-  VALUE binding, result;
-
-  binding = rb_eval_string("$rbtrace_binding ||= binding");
-  result = rb_funcall(binding, rb_intern("eval"), 1, rb_code);
-  return rb_funcall(result, rb_intern("inspect"), 0);
+  return rb_funcall(rbtrace_module, rb_intern("eval_and_inspect"), 1, rb_code);
 }
 
 static VALUE
@@ -1028,7 +1026,7 @@ rbtrace__process_event(msgpack_object cmd)
     strncpy(query, str.ptr, str.size);
     query[str.size] = 0;
 
-    VALUE rb_code, binding;
+    VALUE rb_code;
     rb_code = rb_str_new2(query);
 
     val = rb_rescue(eval_inspect, rb_code, rescue_inspect, Qnil);
@@ -1134,10 +1132,24 @@ send_write(VALUE klass, VALUE val) {
 void
 Init_rbtrace()
 {
-  VALUE mod = rb_define_module("RBTrace");
-  VALUE output = rb_define_module_under(mod, "OUT");
+  rbtrace_module = rb_define_module("RBTrace");
+  VALUE output = rb_define_module_under(rbtrace_module, "OUT");
 
   rb_define_singleton_method(output, "write", send_write, 1);
+
+  rb_eval_string(
+    "module RBTrace\n"
+    "  def self.eval_context\n"
+    "    @eval_context ||= binding\n"
+    "  end\n"
+
+    "  def self.eval_and_inspect(code)\n"
+    "    t = Thread.new { Thread.current[:output] = eval_context.eval(code).inspect }\n"
+    "    t.join\n"
+    "    t[:output]\n"
+    "  end\n"
+    "end\n"
+  );
 
   // hook into the gc
   gc_hook = Data_Wrap_Struct(rb_cObject, rbtrace_gc_mark, NULL, NULL);
