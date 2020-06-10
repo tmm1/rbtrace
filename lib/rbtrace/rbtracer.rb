@@ -96,7 +96,7 @@ class RBTracer
   end
 
   def clean_socket_path
-    FileUtils.rm(socket_path) if File.exists?(socket_path)
+    FileUtils.rm(socket_path) if File.exist?(socket_path)
   end
 
   # Watch for method calls slower than a threshold.
