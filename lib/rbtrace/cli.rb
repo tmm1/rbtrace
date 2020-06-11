@@ -12,7 +12,7 @@ class RBTraceCLI
   #
   # Returns nothing.
   def self.check_msgmnb
-    if File.exists?(msgmnb = "/proc/sys/kernel/msgmnb")
+    if File.exist?(msgmnb = "/proc/sys/kernel/msgmnb")
       curr = File.read(msgmnb).to_i
       max = 1024*1024
       cmd = "sysctl kernel.msgmnb=#{max}"
@@ -273,7 +273,7 @@ EOS
         file = [
           config,
           File.expand_path("../../../tracers/#{config}.tracer", __FILE__)
-        ].find{ |f| File.exists?(f) }
+        ].find{ |f| File.exist?(f) }
 
         unless file
           parser.die :config, '(file does not exist)'

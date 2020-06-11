@@ -13,7 +13,7 @@ require 'fileutils'
 
 libdir = File.basename RbConfig::CONFIG['libdir']
 
-unless File.exists?("#{CWD}/dst/#{libdir}/libmsgpackc.a")
+unless File.exist?("#{CWD}/dst/#{libdir}/libmsgpackc.a")
   Logging.message "Building msgpack\n"
 
   msgpack = File.basename('msgpack-1.1.0.tar.gz')
@@ -28,7 +28,7 @@ unless File.exists?("#{CWD}/dst/#{libdir}/libmsgpackc.a")
   end
 
   Dir.chdir('src') do
-    FileUtils.rm_rf(dir) if File.exists?(dir)
+    FileUtils.rm_rf(dir) if File.exist?(dir)
 
     sys("tar zxvfo #{msgpack}")
     Dir.chdir(dir) do
