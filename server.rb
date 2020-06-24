@@ -1,4 +1,5 @@
 require 'ext/rbtrace'
+require 'tmpdir'
 
 class String
   def multiply_vowels(num)
@@ -26,19 +27,21 @@ end
 
 while true
   proc {
-    Dir.chdir("/tmp") do
-      Dir.pwd
-      Process.pid
-      'hello'.multiply_vowels(3){ :ohai }
-      sleep rand*0.5
+    Dir.mktmpdir do |tmp|
+      Dir.chdir(tmp) do
+        Dir.pwd
+        Process.pid
+        'hello'.multiply_vowels(3){ :ohai }
+        sleep rand*0.5
 
-      ENV['blah']
-      GC.start
+        ENV['blah']
+        GC.start
 
-      reload_test.call
-      Test.run
+        reload_test.call
+        Test.run
 
-      #fib(1024*100)
+        #fib(1024*100)
+      end
     end
   }.call
 end
