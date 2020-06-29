@@ -51,6 +51,11 @@
 #endif
 
 
+// The SUN_LEN macro is not available on Android
+#ifndef SUN_LEN
+#define SUN_LEN(ptr) ((size_t) (((struct sockaddr_un *) 0)->sun_path) + strlen((ptr)->sun_path))
+#endif
+
 static uint64_t
 ru_utime_usec()
 {
@@ -688,7 +693,7 @@ rbtracer_add(char *query, bool is_slow)
       *idx = NULL,
       *method = NULL;
 
-    if (NULL != (idx = rindex(query, '.'))) {
+    if (NULL != (idx = strrchr(query, '.'))) {
       klass_begin = 0;
       klass_end = idx - query;
       is_singleton = true;
@@ -700,7 +705,7 @@ rbtracer_add(char *query, bool is_slow)
 
       method = idx+1;
 
-    } else if (NULL != (idx = rindex(query, '#'))) {
+    } else if (NULL != (idx = strrchr(query, '#'))) {
       klass_begin = 0;
       klass_end = idx - query;
       is_singleton = false;
