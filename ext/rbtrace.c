@@ -22,6 +22,7 @@
 
 #include <msgpack.h>
 #include <ruby.h>
+#include <ruby/debug.h>
 
 #ifndef RUBY_VM
 #include <env.h>
