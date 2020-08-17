@@ -1143,20 +1143,6 @@ Init_rbtrace()
 
   rb_define_singleton_method(output, "write", send_write, 1);
 
-  rb_eval_string(
-    "module RBTrace\n"
-    "  def self.eval_context\n"
-    "    @eval_context ||= binding\n"
-    "  end\n"
-
-    "  def self.eval_and_inspect(code)\n"
-    "    t = Thread.new { Thread.current[:output] = eval_context.eval(code).inspect }\n"
-    "    t.join\n"
-    "    t[:output]\n"
-    "  end\n"
-    "end\n"
-  );
-
   // hook into the gc
   gc_hook = Data_Wrap_Struct(rb_cObject, rbtrace_gc_mark, NULL, NULL);
   rb_global_variable(&gc_hook);
