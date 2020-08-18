@@ -449,7 +449,7 @@ EOS
 
         delim = "146621c9d681409aa"
 
-        code = "Thread.list.map{|t| t.backtrace[0...#{num}].join(\"#{delim}\")}.join(\"#{delim*2}\")"
+        code = "Thread.list.reject { |t| t.name == '__RBTrace__' }.map{ |t| t.backtrace[0...#{num}].join(\"#{delim}\")}.join(\"#{delim*2}\")"
 
         if res = tracer.eval(code)
           tracer.puts res.split(delim).join("\n")
