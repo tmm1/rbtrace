@@ -1067,7 +1067,7 @@ rbtrace__receive(void *data)
     // wait up to a second for the message to arrive
     for (n=0; n<10 && ret==-1; n++) {
       ret = msgrcv(rbtracer.mqi_id, &msg, sizeof(msg)-sizeof(long), 0, IPC_NOWAIT);
-      nanosleep((const struct timespec[]){{0, (100 % 1000) * 1000000}}, NULL); // 100ms
+      if (ret == -1) nanosleep((const struct timespec[]){{0, (100 % 1000) * 1000000}}, NULL); // 100ms
     }
 
     if (ret == -1) {
