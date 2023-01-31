@@ -503,7 +503,19 @@ EOS
           temp.unlink
         end
 
-        tracer.eval("file = File.open('#{filename}', 'w'); ObjectSpace.dump_all(output: file); file.close")
+        tracer.eval(<<-RUBY)
+          Thread.new do
+            Thread.current.name = '__RBTrace__'
+            pid = ::Process.fork do
+              file = File.open('#{filename}.tmp', 'w')
+              ObjectSpace.dump_all(output: file)
+              file.close
+              File.rename('#{filename}.tmp', '#{filename}')
+              exit!(0)
+            end
+            Process.waitpid(pid)
+          end
+        RUBY
         puts "Heapdump being written to #{filename}"
 
       elsif opts[:shapesdump_given]
@@ -517,7 +529,19 @@ EOS
           temp.unlink
         end
 
-        tracer.eval("file = File.open('#{filename}', 'w'); ObjectSpace.dump_shapes(output: file); file.close")
+        tracer.eval(<<-RUBY)
+          Thread.new do
+            Thread.current.name = '__RBTrace__'
+            pid = ::Process.fork do
+              file = File.open('#{filename}.tmp', 'w')
+              ObjectSpace.dump_shapes(output: file)
+              file.close
+              File.rename('#{filename}.tmp', '#{filename}')
+              exit!(0)
+            end
+            Process.waitpid(pid)
+          end
+        RUBY
         puts "Shapes dump being written to #{filename}"
 
       elsif opts[:eval_given]
