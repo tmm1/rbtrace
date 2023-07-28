@@ -1,0 +1,26 @@
+---
+name: Test
+on: [push, pull_request]
+
+jobs:
+  ruby:
+    name: Ruby ${{ matrix.ruby }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ["ubuntu-latest"]
+        ruby: ["3.2", "3.1", "3.0", "2.7", "2.6"]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler-cache: true
+
+      - name: Tests
+        run: ./test.sh
