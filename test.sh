@@ -38,6 +38,7 @@ trace -m sleep Dir.chdir Dir.pwd Process.pid "String#gsub" "String#*"
 trace -m "Kernel#"
 trace -m "String#gsub(self,@test)" "String#*(self,__source__)" "String#multiply_vowels(self,self.length,num)"
 trace -e 'p(1 + 1)'
+trace -h
 trace --gc --slow=200
 trace --gc -m Dir.
 trace --slow=250

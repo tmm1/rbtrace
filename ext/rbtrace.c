@@ -79,7 +79,7 @@ timeofday_usec()
 #define MAX_TRACERS 100 // max method tracers
 #define MAX_EXPRS 10    // max expressions per tracer
 #ifndef BUF_SIZE        // msgq buffer size
-#define BUF_SIZE 120
+#define BUF_SIZE 1024
 #endif
 
 typedef struct {
@@ -1137,6 +1137,8 @@ Init_rbtrace()
 {
   rbtrace_module = rb_define_module("RBTrace");
   VALUE output = rb_define_module_under(rbtrace_module, "OUT");
+
+  rb_const_set(rbtrace_module, rb_intern("BUF_SIZE"), INT2NUM(BUF_SIZE));
 
   rb_define_singleton_method(output, "write", send_write, 1);
 
