@@ -1135,6 +1135,13 @@ send_write(VALUE klass, VALUE val) {
   return Qnil;
 }
 
+static const rb_data_type_t rbtrace_type = {
+    "RBTrace",
+    {
+        rbtrace_gc_mark,
+    }
+};
+
 void
 Init_rbtrace()
 {
@@ -1144,8 +1151,8 @@ Init_rbtrace()
   rb_define_singleton_method(output, "write", send_write, 1);
 
   // hook into the gc
-  gc_hook = Data_Wrap_Struct(rb_cObject, rbtrace_gc_mark, NULL, NULL);
   rb_global_variable(&gc_hook);
+  gc_hook = TypedData_Wrap_Struct(rb_cObject, &rbtrace_type, NULL);
 
   // catch signal telling us to read from the msgq
 #if defined(HAVE_RB_POSTPONED_JOB_REGISTER_ONE)
