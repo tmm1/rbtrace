@@ -23,7 +23,7 @@ Gem::Specification.new do |s|
   s.add_dependency 'optimist', '>= 3.0.0'
   s.add_dependency 'msgpack',  '>= 0.4.3'
 
-  s.add_development_dependency "rake", "~> 10.0"
+  s.add_development_dependency "rake"
 
   s.license = "MIT"
   s.summary = 'rbtrace: like strace but for ruby code'

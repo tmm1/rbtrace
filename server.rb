@@ -1,4 +1,4 @@
-require 'ext/rbtrace'
+require 'rbtrace'
 require 'tmpdir'
 
 class String

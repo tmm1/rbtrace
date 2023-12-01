@@ -227,8 +227,7 @@ EOS
 
       opt :shapesdump,
         "generate a shapes dump for the process in FILENAME",
-        :default => "AUTO",
-
+        :default => "AUTO"
     end
 
     opts = Optimist.with_standard_exception_handling(parser) do
