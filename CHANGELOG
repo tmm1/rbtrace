@@ -1,0 +1,7 @@
+- 0.5.0 - 02-12-2023
+
+- Improved --backtraces implementation
+- Added --shapedump which is useful for lighter weight object shape dumps on Ruby 3.2 and up
+- Move heap dumping to a fork for better performance
+- Use TypedData API which has been supported for a very long time
+- Update CI and fix some small errors
