@@ -323,7 +323,7 @@ class RBTracer
       msg = cmd.to_msgpack
       # A message is null-terminated, but bytesize gives the unterminated
       # length.
-      if msg.bytesize >= RbTrace::BUF_SIZE
+      if msg.bytesize >= RBTrace::BUF_SIZE
         raise ArgumentError, "command is too long (#{msg.bytesize}B >= #{MsgQ::EventMsg::BUF_SIZE}B)"
       end
       MsgQ::EventMsg.send_cmd(@qo, msg)
