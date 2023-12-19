@@ -1,3 +1,7 @@
+- 0.5.1 - 19-12-2023
+
+- Fix: RbTrace was used incorrectly instead of RBTrace, which lead to a broken build
+
 - 0.5.0 - 02-12-2023
 
 - Improved --backtraces implementation
