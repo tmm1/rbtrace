@@ -1,6 +1,7 @@
 require 'optimist'
 require 'rbtrace/rbtracer'
 require 'rbtrace/version'
+require 'rbtrace/converter'
 
 class RBTraceCLI
   singleton_class.send(:attr_accessor, :tracer)
@@ -228,6 +229,10 @@ EOS
       opt :shapesdump,
         "generate a shapes dump for the process in FILENAME",
         :default => "AUTO"
+
+      opt :convert,
+        "convert a trace file to another format",
+        :default => "flamegraph"
     end
 
     opts = Optimist.with_standard_exception_handling(parser) do
@@ -243,8 +248,8 @@ EOS
       ARGV.clear
     end
 
-    unless %w[ fork eval interactive backtrace backtraces slow slowcpu firehose methods config gc memory heapdump].find{ |n| opts[:"#{n}_given"] }
-      $stderr.puts "Error: --slow, --slowcpu, --gc, --firehose, --methods, --interactive, --backtraces, --backtrace, --memory, --heapdump, --shapesdump or --config required."
+    unless %w[ fork eval interactive backtrace backtraces slow slowcpu firehose methods config gc memory heapdump convert].find{ |n| opts[:"#{n}_given"] }
+      $stderr.puts "Error: --slow, --slowcpu, --gc, --firehose, --methods, --interactive, --backtraces, --backtrace, --memory, --heapdump, --shapesdump, --convert or --config required."
       $stderr.puts "Try --help for help."
       exit(-1)
     end
@@ -358,6 +363,14 @@ EOS
         STDERR.puts "*** could not find any processes matching #{opts[:ps].inspect}"
         exit 1
       end
+    end
+
+    if opts[:convert_given]
+      require 'rbtrace/converter'
+      converter = RBTrace::Converter.build(opts[:convert], ARGF)
+      converter.convert
+
+      return
     end
 
     if opts[:exec_given]
