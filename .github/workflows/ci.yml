@@ -23,4 +23,4 @@ jobs:
           bundler-cache: true
 
       - name: Tests
-        run: ./test.sh
+        run: ./test.sh && rake test

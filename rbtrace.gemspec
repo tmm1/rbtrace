@@ -24,6 +24,7 @@ Gem::Specification.new do |s|
   s.add_dependency 'msgpack',  '>= 0.4.3'
 
   s.add_development_dependency "rake"
+  s.add_development_dependency "minitest"
 
   s.license = "MIT"
   s.summary = 'rbtrace: like strace but for ruby code'

@@ -62,6 +62,23 @@ for popular ruby libraries and functions.
 
     % rbtrace -p <PID> -c activerecord io
 
+## flamegraph
+
+You could generate flamegraph from traces
+
+```
+rbtrace -p <PID> > trace.log
+rbtrace --convert=flamegraph trace.log > out.stacks
+```
+
+Then run [flamegraph](https://github.com/brendangregg/FlameGraph/blob/master/flamegraph.pl)
+```
+flamegraph.pl --color=io --width=800 --title="Rbtrace" out.stacks > rbtrace.svg
+firefox rbtrace.svg
+```
+
+Or upload `out.stacks` to e.g. https://speedscope.app
+
 ## detailed example
 
 ### require rbtrace into a process
