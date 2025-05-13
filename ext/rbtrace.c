@@ -47,7 +47,7 @@
 
 #ifdef __FreeBSD__
  #define PLATFORM_FREEBSD
-#elif __OpenBSD__
+#elif defined __OpenBSD__
  #define PLATFORM_OPENBSD
 #endif
 
@@ -361,7 +361,7 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
 
   } else if (rbtracer.num > 0) {
     // tracing only specific methods
-    int i, n;
+    unsigned int i, n;
     for (i=0, n=0; i<MAX_TRACERS && n<rbtracer.num; i++) {
       rbtracer_t *curr = &rbtracer.list[i];
 
@@ -1080,7 +1080,7 @@ rbtrace__receive(void *data)
 }
 
 static void
-rbtrace_gc_mark()
+rbtrace_gc_mark(void *ptr)
 {
   if (rbtracer.gc && !in_event_hook) {
     rbtrace__send_event(1,

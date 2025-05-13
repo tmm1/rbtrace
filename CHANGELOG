@@ -1,3 +1,8 @@
+- 0.5.2 - 05-13-2025
+
+- Specify void* argument in rbtrace_gc_mark()'s signature, as expected by rb_data_type_t.
+  This was a warning before C23 but it's now an error, and GCC 15 defaults to C23.
+
 - 0.5.1 - 19-12-2023
 
 - Fix: RbTrace was used incorrectly instead of RBTrace, which lead to a broken build
