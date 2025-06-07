@@ -1,3 +1,7 @@
+- 0.5.3 - 06-07-2025
+
+- Fix: Build failures with C23 (#100)
+
 - 0.5.2 - 05-13-2025
 
 - Specify void* argument in rbtrace_gc_mark()'s signature, as expected by rb_data_type_t.
