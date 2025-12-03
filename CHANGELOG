@@ -1,5 +1,6 @@
-- 0.5.3 - 06-07-2025
+- 0.5.3 - 03-12-2025
 
+- Fix --interactive irb mode
 - Fix: Build failures with C23 (#100)
 
 - 0.5.2 - 05-13-2025
