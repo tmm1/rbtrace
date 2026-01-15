@@ -67,3 +67,15 @@ have_func('rb_postponed_job_register_one', 'ruby.h')
 $CFLAGS << " -Wall "
 
 create_makefile('rbtrace')
+
+msgpack_src = File.join(CWD, "src", "msgpack-1.1.0")
+msgpack_dst = File.join(CWD, "dst")
+
+File.open('Makefile', 'a') do |mk|
+    mk.print <<EOF
+install: install-cleanup
+
+install-cleanup: $(DLLIB)
+	rm -rf "#{msgpack_src}" "#{msgpack_dst}"
+EOF
+end
