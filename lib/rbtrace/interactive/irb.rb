@@ -11,7 +11,7 @@ class IRB::Context
   end
 
   def inspect_last_value(output = +"")
-    @last_value
+    output << @last_value.to_s
   end
 end
 
