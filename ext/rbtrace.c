@@ -1092,11 +1092,19 @@ rbtrace_gc_mark(void *ptr)
 
 static VALUE gc_hook;
 
-#if defined(HAVE_RB_POSTPONED_JOB_REGISTER_ONE) || !defined(RUBY_VM)
+#if defined(HAVE_RB_POSTPONED_JOB_PREREGISTER) && defined(HAVE_RB_POSTPONED_JOB_TRIGGER)
+static rb_postponed_job_handle_t rbtrace_postponed_job_handle = POSTPONED_JOB_HANDLE_INVALID;
+#endif
+
+#if (defined(HAVE_RB_POSTPONED_JOB_PREREGISTER) && defined(HAVE_RB_POSTPONED_JOB_TRIGGER)) || defined(HAVE_RB_POSTPONED_JOB_REGISTER_ONE) || !defined(RUBY_VM)
 static void
 sigurg(int signal)
 {
-#if defined(HAVE_RB_POSTPONED_JOB_REGISTER_ONE)
+#if defined(HAVE_RB_POSTPONED_JOB_PREREGISTER) && defined(HAVE_RB_POSTPONED_JOB_TRIGGER)
+  if (rbtrace_postponed_job_handle != POSTPONED_JOB_HANDLE_INVALID) {
+    rb_postponed_job_trigger(rbtrace_postponed_job_handle);
+  }
+#elif defined(HAVE_RB_POSTPONED_JOB_REGISTER_ONE)
   rb_postponed_job_register_one(0, rbtrace__receive, 0);
 #else
   rbtrace__receive(0);
@@ -1104,10 +1112,10 @@ sigurg(int signal)
 }
 #endif
 
-#if !defined(HAVE_RB_POSTPONED_JOB_REGISTER_ONE) && defined(RUBY_VM)
+#if !(defined(HAVE_RB_POSTPONED_JOB_PREREGISTER) && defined(HAVE_RB_POSTPONED_JOB_TRIGGER)) && !defined(HAVE_RB_POSTPONED_JOB_REGISTER_ONE) && defined(RUBY_VM)
 static VALUE signal_handler_proc;
 static VALUE
-signal_handler_wrapper(VALUE arg, VALUE ctx)
+signal_handler_wrapper(RB_BLOCK_CALL_FUNC_ARGLIST(arg, ctx))
 {
   static int in_signal_handler = 0;
   if (in_signal_handler) return Qnil;
@@ -1154,7 +1162,10 @@ Init_rbtrace()
   gc_hook = TypedData_Wrap_Struct(rb_cObject, &rbtrace_type, NULL);
 
   // catch signal telling us to read from the msgq
-#if defined(HAVE_RB_POSTPONED_JOB_REGISTER_ONE)
+#if defined(HAVE_RB_POSTPONED_JOB_PREREGISTER) && defined(HAVE_RB_POSTPONED_JOB_TRIGGER)
+  rbtrace_postponed_job_handle = rb_postponed_job_preregister(0, rbtrace__receive, 0);
+  signal(SIGURG, sigurg);
+#elif defined(HAVE_RB_POSTPONED_JOB_REGISTER_ONE)
   signal(SIGURG, sigurg);
 #elif defined(RUBY_VM)
   signal_handler_proc = rb_proc_new(signal_handler_wrapper, Qnil);
