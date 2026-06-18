@@ -25,6 +25,9 @@ Gem::Specification.new do |s|
 
   s.add_development_dependency "rake"
 
+  # needed by test/interactive_irb_test.rb
+  s.add_development_dependency "irb", ">= 1.15"
+
   s.license = "MIT"
   s.summary = 'rbtrace: like strace but for ruby code'
   s.description = 'rbtrace shows you method calls happening inside another ruby process in real time.'

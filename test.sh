@@ -48,4 +48,9 @@ trace --gc -m Dir. --slow=250
 trace -m Process. Dir.pwd "Proc#call"
 trace --firehose
 
+echo ------------------------------------------
+echo interactive irb output
+echo ------------------------------------------
+bundle exec ruby test/interactive_irb_test.rb $PID
+
 cleanup

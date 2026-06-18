@@ -1,3 +1,7 @@
+- 0.5.4 - 19-05-2026
+
+- Fix --interactive irb mode not printing eval results
+
 - 0.5.3 - 03-12-2025
 
 - Fix --interactive irb mode
