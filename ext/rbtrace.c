@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 199309L
+
 #include <assert.h>
 #include <inttypes.h>
 #include <errno.h>
@@ -1062,8 +1064,11 @@ rbtrace__receive(void *data)
   while (true) {
     int ret = -1;
 
-    for (n=0; n<10 && ret==-1; n++)
+    // wait up to a second for the message to arrive
+    for (n=0; n<10 && ret==-1; n++) {
       ret = msgrcv(rbtracer.mqi_id, &msg, sizeof(msg)-sizeof(long), 0, IPC_NOWAIT);
+      if (ret == -1) nanosleep((const struct timespec[]){{0, (100 % 1000) * 1000000}}, NULL); // 100ms
+    }
 
     if (ret == -1) {
       break;
