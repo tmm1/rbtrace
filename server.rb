@@ -32,6 +32,7 @@ while true
         Dir.pwd
         Process.pid
         'hello'.multiply_vowels(3){ :ohai }
+        'hello'.upcase
         sleep rand*0.5
 
         ENV['blah']

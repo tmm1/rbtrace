@@ -307,6 +307,18 @@ rbtrace__send_names(ID mid, VALUE klass)
   }
 }
 
+typedef struct {
+  VALUE proc;
+  VALUE receiver;
+} expr_proc_call_t;
+
+static VALUE
+call_expr_proc(VALUE data)
+{
+  expr_proc_call_t *args = (expr_proc_call_t *)data;
+  return rb_funcall(args->proc, rb_intern("call"), 1, args->receiver);
+}
+
 static int in_event_hook = 0;
 
 static void
@@ -491,8 +503,16 @@ event_hook(rb_event_t event, NODE *node, VALUE self, ID mid, VALUE klass)
             val = rb_inspect(rb_ivar_get(self, rb_intern(expr)));
 
           } else {
-            snprintf(buffer, len+150, "(begin; ObjectSpace._id2ref(%ld).instance_eval{ %s }; rescue Exception => e; e; end).inspect", NUM2LONG(rb_obj_id(self)), expr);
-            val = rb_eval_string_protect(buffer, 0);
+            int state = 0;
+            VALUE expr_proc;
+            expr_proc_call_t args;
+            snprintf(buffer, len+150, "proc { |__rbtrace_receiver__| (begin; __rbtrace_receiver__.instance_eval { %s }; rescue Exception => e; e; end).inspect }", expr);
+            expr_proc = rb_eval_string_protect(buffer, &state);
+            if (state == 0) {
+              args.proc = expr_proc;
+              args.receiver = self;
+              val = rb_protect(call_expr_proc, (VALUE)&args, &state);
+            }
           }
 
           if (RTEST(val) && TYPE(val) == T_STRING) {
@@ -1092,11 +1112,20 @@ rbtrace_gc_mark(void *ptr)
 
 static VALUE gc_hook;
 
-#if defined(HAVE_RB_POSTPONED_JOB_REGISTER_ONE) || !defined(RUBY_VM)
+#if defined(HAVE_RB_POSTPONED_JOB_PREREGISTER) && defined(HAVE_RB_POSTPONED_JOB_TRIGGER)
+#define RBTRACE_USE_PREREGISTERED_POSTPONED_JOB 1
+static rb_postponed_job_handle_t rbtrace_postponed_job_handle = POSTPONED_JOB_HANDLE_INVALID;
+#endif
+
+#if defined(RBTRACE_USE_PREREGISTERED_POSTPONED_JOB) || defined(HAVE_RB_POSTPONED_JOB_REGISTER_ONE) || !defined(RUBY_VM)
 static void
 sigurg(int signal)
 {
-#if defined(HAVE_RB_POSTPONED_JOB_REGISTER_ONE)
+#if defined(RBTRACE_USE_PREREGISTERED_POSTPONED_JOB)
+  if (rbtrace_postponed_job_handle != POSTPONED_JOB_HANDLE_INVALID) {
+    rb_postponed_job_trigger(rbtrace_postponed_job_handle);
+  }
+#elif defined(HAVE_RB_POSTPONED_JOB_REGISTER_ONE)
   rb_postponed_job_register_one(0, rbtrace__receive, 0);
 #else
   rbtrace__receive(0);
@@ -1104,10 +1133,10 @@ sigurg(int signal)
 }
 #endif
 
-#if !defined(HAVE_RB_POSTPONED_JOB_REGISTER_ONE) && defined(RUBY_VM)
+#if defined(RUBY_VM) && (defined(RBTRACE_USE_PREREGISTERED_POSTPONED_JOB) || !defined(HAVE_RB_POSTPONED_JOB_REGISTER_ONE))
 static VALUE signal_handler_proc;
 static VALUE
-signal_handler_wrapper(VALUE arg, VALUE ctx)
+signal_handler_wrapper(RB_BLOCK_CALL_FUNC_ARGLIST(arg, ctx))
 {
   static int in_signal_handler = 0;
   if (in_signal_handler) return Qnil;
@@ -1117,6 +1146,14 @@ signal_handler_wrapper(VALUE arg, VALUE ctx)
   in_signal_handler--;
 
   return Qnil;
+}
+
+static void
+install_ruby_sigurg_handler(void)
+{
+  signal_handler_proc = rb_proc_new(signal_handler_wrapper, Qnil);
+  rb_global_variable(&signal_handler_proc);
+  rb_funcall(Qnil, rb_intern("trap"), 2, rb_str_new_cstr("URG"), signal_handler_proc);
 }
 #endif
 
@@ -1154,12 +1191,25 @@ Init_rbtrace()
   gc_hook = TypedData_Wrap_Struct(rb_cObject, &rbtrace_type, NULL);
 
   // catch signal telling us to read from the msgq
-#if defined(HAVE_RB_POSTPONED_JOB_REGISTER_ONE)
+#if defined(RBTRACE_USE_PREREGISTERED_POSTPONED_JOB)
+  rbtrace_postponed_job_handle = rb_postponed_job_preregister(0, rbtrace__receive, 0);
+  if (rbtrace_postponed_job_handle == POSTPONED_JOB_HANDLE_INVALID) {
+
+#ifdef RUBY_VM
+    rb_warn("rbtrace: failed to preregister postponed job; falling back to Ruby SIGURG handler");
+    install_ruby_sigurg_handler();
+#else
+    rb_raise(rb_eRuntimeError, "rbtrace: failed to preregister postponed job");
+#endif
+
+  } else {
+    signal(SIGURG, sigurg);
+  }
+
+#elif defined(HAVE_RB_POSTPONED_JOB_REGISTER_ONE)
   signal(SIGURG, sigurg);
 #elif defined(RUBY_VM)
-  signal_handler_proc = rb_proc_new(signal_handler_wrapper, Qnil);
-  rb_global_variable(&signal_handler_proc);
-  rb_funcall(Qnil, rb_intern("trap"), 2, rb_str_new_cstr("URG"), signal_handler_proc);
+  install_ruby_sigurg_handler();
 #else
   signal(SIGURG, sigurg);
 #endif

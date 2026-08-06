@@ -61,6 +61,8 @@ end
 
 have_func('rb_during_gc', 'ruby.h')
 have_func('rb_gc_add_event_hook', ['ruby.h', 'node.h'])
+have_func('rb_postponed_job_preregister', ['ruby.h', 'ruby/debug.h'])
+have_func('rb_postponed_job_trigger', ['ruby.h', 'ruby/debug.h'])
 have_func('rb_postponed_job_register_one', 'ruby.h')
 
 # warnings save lives

@@ -243,7 +243,7 @@ EOS
       ARGV.clear
     end
 
-    unless %w[ fork eval interactive backtrace backtraces slow slowcpu firehose methods config gc memory heapdump].find{ |n| opts[:"#{n}_given"] }
+    unless %w[ fork eval interactive backtrace backtraces slow slowcpu firehose methods config gc memory heapdump shapesdump].find{ |n| opts[:"#{n}_given"] }
       $stderr.puts "Error: --slow, --slowcpu, --gc, --firehose, --methods, --interactive, --backtraces, --backtrace, --memory, --heapdump, --shapesdump or --config required."
       $stderr.puts "Try --help for help."
       exit(-1)
@@ -505,6 +505,7 @@ EOS
         tracer.eval(<<-RUBY)
           Thread.new do
             Thread.current.name = '__RBTrace__'
+            require 'objspace'
             pid = ::Process.fork do
               file = File.open('#{filename}.tmp', 'w')
               ObjectSpace.dump_all(output: file)
@@ -531,6 +532,7 @@ EOS
         tracer.eval(<<-RUBY)
           Thread.new do
             Thread.current.name = '__RBTrace__'
+            require 'objspace'
             pid = ::Process.fork do
               file = File.open('#{filename}.tmp', 'w')
               ObjectSpace.dump_shapes(output: file)
