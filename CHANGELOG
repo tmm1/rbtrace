@@ -1,6 +1,7 @@
 - 0.5.5 - 07-08-2026
 
 - Add Ruby 4.1 support by using the current postponed-job and block callback APIs
+- Fix native command handling to release MessagePack memory and reject invalid tracer IDs
 - Fix traced expressions to avoid the deprecated ObjectSpace._id2ref API
 - Fix --heapdump and --shapesdump by loading objspace before using its dump APIs
 

@@ -610,9 +610,11 @@ rbtracer_remove(char *query, int id)
       }
     }
   } else {
-    if (id >= MAX_TRACERS) goto out;
+    if (id < 0 || id >= MAX_TRACERS) goto out;
     tracer = &rbtracer.list[id];
   }
+
+  if (!tracer) goto out;
 
   if (tracer->query) {
     tracer_id = tracer->id;
@@ -794,7 +796,7 @@ rbtracer_add_expr(int id, char *expr)
   int tracer_id = -1;
   rbtracer_t *tracer = NULL;
 
-  if (id >= MAX_TRACERS) goto out;
+  if (id < 0 || id >= MAX_TRACERS) goto out;
   tracer = &rbtracer.list[id];
 
   if (tracer->query) {
@@ -1063,6 +1065,20 @@ rbtrace__process_event(msgpack_object cmd)
   }
 }
 
+static VALUE
+rbtrace__process_unpacked_event(VALUE data)
+{
+  rbtrace__process_event(*(msgpack_object *)data);
+  return Qnil;
+}
+
+static VALUE
+rbtrace__destroy_unpacked(VALUE data)
+{
+  msgpack_unpacked_destroy((msgpack_unpacked *)data);
+  return Qnil;
+}
+
 static void
 rbtrace__receive(void *data)
 {
@@ -1091,10 +1107,17 @@ rbtrace__receive(void *data)
       msgpack_unpacked unpacked;
       msgpack_unpacked_init(&unpacked);
 
-      bool success = msgpack_unpack_next(&unpacked, msg.buf, sizeof(msg.buf), NULL);
-      if (!success) continue;
+      msgpack_unpack_return unpack_result = msgpack_unpack_next(&unpacked, msg.buf, sizeof(msg.buf), NULL);
+      if (unpack_result != MSGPACK_UNPACK_SUCCESS &&
+          unpack_result != MSGPACK_UNPACK_EXTRA_BYTES) {
+        msgpack_unpacked_destroy(&unpacked);
+        continue;
+      }
 
-      rbtrace__process_event(unpacked.data);
+      rb_ensure(
+        rbtrace__process_unpacked_event, (VALUE)&unpacked.data,
+        rbtrace__destroy_unpacked, (VALUE)&unpacked
+      );
     }
   }
 }
