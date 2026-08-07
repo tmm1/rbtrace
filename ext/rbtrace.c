@@ -757,10 +757,16 @@ rbtracer_add(char *query, bool is_slow)
       goto out;
   }
 
+  char *query_copy = strdup(query);
+  if (!query_copy) {
+    tracer_id = -1;
+    goto out;
+  }
+
   memset(tracer, 0, sizeof(*tracer));
 
   tracer->id = tracer_id;
-  tracer->query = strdup(query);
+  tracer->query = query_copy;
   tracer->is_slow = is_slow;
 
   if (klass_end != klass_begin) {
@@ -803,8 +809,12 @@ rbtracer_add_expr(int id, char *expr)
     tracer_id = tracer->id;
 
     if (tracer->num_exprs < MAX_EXPRS) {
-      expr_id = tracer->num_exprs++;
-      tracer->exprs[expr_id] = strdup(expr);
+      char *expr_copy = strdup(expr);
+      if (!expr_copy) goto out;
+
+      expr_id = tracer->num_exprs;
+      tracer->exprs[expr_id] = expr_copy;
+      tracer->num_exprs++;
     }
   }
 
@@ -1096,7 +1106,7 @@ rbtrace__receive(void *data)
   int n = 0;
 
   while (true) {
-    int ret = -1;
+    ssize_t ret = -1;
 
     for (n=0; n<10 && ret==-1; n++)
       ret = msgrcv(rbtracer.mqi_id, &msg, sizeof(msg)-sizeof(long), 0, IPC_NOWAIT);
@@ -1107,7 +1117,7 @@ rbtrace__receive(void *data)
       msgpack_unpacked unpacked;
       msgpack_unpacked_init(&unpacked);
 
-      msgpack_unpack_return unpack_result = msgpack_unpack_next(&unpacked, msg.buf, sizeof(msg.buf), NULL);
+      msgpack_unpack_return unpack_result = msgpack_unpack_next(&unpacked, msg.buf, (size_t)ret, NULL);
       if (unpack_result != MSGPACK_UNPACK_SUCCESS &&
           unpack_result != MSGPACK_UNPACK_EXTRA_BYTES) {
         msgpack_unpacked_destroy(&unpacked);
