@@ -1,3 +1,9 @@
+- 0.5.5 - 07-08-2026
+
+- Add Ruby 4.1 support by using the current postponed-job and block callback APIs
+- Fix traced expressions to avoid the deprecated ObjectSpace._id2ref API
+- Fix --heapdump and --shapesdump by loading objspace before using its dump APIs
+
 - 0.5.4 - 19-05-2026
 
 - Fix --interactive irb mode not printing eval results
@@ -5,21 +11,20 @@
 - 0.5.3 - 03-12-2025
 
 - Fix --interactive irb mode
-- Fix: Build failures with C23 (#100)
 
-- 0.5.2 - 05-13-2025
+- 0.5.2 - 13-05-2025
 
 - Specify void* argument in rbtrace_gc_mark()'s signature, as expected by rb_data_type_t.
   This was a warning before C23 but it's now an error, and GCC 15 defaults to C23.
 
 - 0.5.1 - 19-12-2023
 
-- Fix: RbTrace was used incorrectly instead of RBTrace, which lead to a broken build
+- Fix: RbTrace was used incorrectly instead of RBTrace, which led to a broken build
 
 - 0.5.0 - 02-12-2023
 
 - Improved --backtraces implementation
-- Added --shapedump which is useful for lighter weight object shape dumps on Ruby 3.2 and up
+- Added --shapesdump which is useful for lighter weight object shape dumps on Ruby 3.2 and up
 - Move heap dumping to a fork for better performance
 - Use TypedData API which has been supported for a very long time
 - Update CI and fix some small errors

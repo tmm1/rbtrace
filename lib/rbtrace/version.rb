@@ -1,5 +1,5 @@
 # frozen_string_literal: true
 
 class RBTracer
-  VERSION = "0.5.4"
+  VERSION = "0.5.5"
 end
