@@ -12,7 +12,7 @@ Gem::Specification.new do |s|
 
   s.require_paths = ['lib', 'ext']
 
-  s.files = `git ls-files`.split("\n")
+  s.files = `git ls-files bin ext lib tracers`.split("\n") + ['CHANGELOG', 'LICENSE', 'README.md']
   s.extensions = 'ext/extconf.rb'
 
   s.bindir = 'bin'
