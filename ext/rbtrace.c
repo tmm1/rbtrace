@@ -1145,20 +1145,16 @@ rbtrace_gc_mark(void *ptr)
 
 static VALUE gc_hook;
 
-#if defined(HAVE_RB_POSTPONED_JOB_PREREGISTER) && defined(HAVE_RB_POSTPONED_JOB_TRIGGER)
-#define RBTRACE_USE_PREREGISTERED_POSTPONED_JOB 1
-static rb_postponed_job_handle_t rbtrace_postponed_job_handle = POSTPONED_JOB_HANDLE_INVALID;
+// ruby 3.3+ only runs postponed jobs on the (possibly idle) thread that got the signal
+#if defined(HAVE_RB_POSTPONED_JOB_PREREGISTER)
+#define RBTRACE_USE_RUBY_SIGURG_HANDLER 1
 #endif
 
-#if defined(RBTRACE_USE_PREREGISTERED_POSTPONED_JOB) || defined(HAVE_RB_POSTPONED_JOB_REGISTER_ONE) || !defined(RUBY_VM)
+#if !defined(RBTRACE_USE_RUBY_SIGURG_HANDLER) && (defined(HAVE_RB_POSTPONED_JOB_REGISTER_ONE) || !defined(RUBY_VM))
 static void
 sigurg(int signal)
 {
-#if defined(RBTRACE_USE_PREREGISTERED_POSTPONED_JOB)
-  if (rbtrace_postponed_job_handle != POSTPONED_JOB_HANDLE_INVALID) {
-    rb_postponed_job_trigger(rbtrace_postponed_job_handle);
-  }
-#elif defined(HAVE_RB_POSTPONED_JOB_REGISTER_ONE)
+#if defined(HAVE_RB_POSTPONED_JOB_REGISTER_ONE)
   rb_postponed_job_register_one(0, rbtrace__receive, 0);
 #else
   rbtrace__receive(0);
@@ -1166,7 +1162,7 @@ sigurg(int signal)
 }
 #endif
 
-#if defined(RUBY_VM) && (defined(RBTRACE_USE_PREREGISTERED_POSTPONED_JOB) || !defined(HAVE_RB_POSTPONED_JOB_REGISTER_ONE))
+#if defined(RUBY_VM) && (defined(RBTRACE_USE_RUBY_SIGURG_HANDLER) || !defined(HAVE_RB_POSTPONED_JOB_REGISTER_ONE))
 static VALUE signal_handler_proc;
 static VALUE
 signal_handler_wrapper(RB_BLOCK_CALL_FUNC_ARGLIST(arg, ctx))
@@ -1224,21 +1220,8 @@ Init_rbtrace()
   gc_hook = TypedData_Wrap_Struct(rb_cObject, &rbtrace_type, NULL);
 
   // catch signal telling us to read from the msgq
-#if defined(RBTRACE_USE_PREREGISTERED_POSTPONED_JOB)
-  rbtrace_postponed_job_handle = rb_postponed_job_preregister(0, rbtrace__receive, 0);
-  if (rbtrace_postponed_job_handle == POSTPONED_JOB_HANDLE_INVALID) {
-
-#ifdef RUBY_VM
-    rb_warn("rbtrace: failed to preregister postponed job; falling back to Ruby SIGURG handler");
-    install_ruby_sigurg_handler();
-#else
-    rb_raise(rb_eRuntimeError, "rbtrace: failed to preregister postponed job");
-#endif
-
-  } else {
-    signal(SIGURG, sigurg);
-  }
-
+#if defined(RBTRACE_USE_RUBY_SIGURG_HANDLER)
+  install_ruby_sigurg_handler();
 #elif defined(HAVE_RB_POSTPONED_JOB_REGISTER_ONE)
   signal(SIGURG, sigurg);
 #elif defined(RUBY_VM)
